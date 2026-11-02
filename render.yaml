@@ -1,4 +1,4 @@
-# ProcureFlow — Render Blueprint (managed deployment)
+# ProcureFlow â€” Render Blueprint (managed deployment)
 #
 # Managed split:
 #   - Web + worker run on Render.
@@ -78,7 +78,7 @@ services:
     plan: starter
     region: oregon # keep the same region as Neon for latency
     autoDeploy: true
-    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @procureflow/web build
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false && pnpm --filter @procureflow/web build
     preDeployCommand: pnpm db:migrate
     startCommand: pnpm --filter @procureflow/web start
     healthCheckPath: /api/health
@@ -91,7 +91,7 @@ services:
     plan: starter
     region: oregon
     autoDeploy: true
-    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    buildCommand: corepack enable && pnpm install --frozen-lockfile --prod=false
     startCommand: pnpm --filter @procureflow/worker start
     envVars:
       - fromGroup: procureflow-shared
