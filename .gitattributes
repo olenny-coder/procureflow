@@ -1,0 +1,13 @@
+* text=auto eol=lf
+
+# Keep the vendored Temporal tree byte-for-byte identical to upstream on
+# checkout so `git diff <temporal-base>` only shows real patches.
+third_party/temporal/** -text
+
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.gz binary
+*.zip binary

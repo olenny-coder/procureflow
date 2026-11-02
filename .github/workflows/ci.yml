@@ -1,0 +1,186 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: Install, lint, typecheck, unit tests, build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout (full history for Temporal diff)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Verify Temporal modification log
+        run: pnpm temporal:check
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Unit tests (policy + validation)
+        run: pnpm test:unit
+
+      - name: Build
+        run: pnpm build
+        env:
+          AUTH_SECRET: ci-build-only-secret-not-used-at-runtime
+          AUTH_URL: http://localhost:3000
+          NEXTAUTH_URL: http://localhost:3000
+
+  stock-temporal:
+    name: Workflows + E2E against stock Temporal CLI
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: procureflow
+          POSTGRES_PASSWORD: procureflow
+          POSTGRES_DB: procureflow
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U procureflow -d procureflow"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://procureflow:procureflow@localhost:5432/procureflow
+      DIRECT_URL: postgresql://procureflow:procureflow@localhost:5432/procureflow
+      DATABASE_SSL: "false"
+      DATABASE_POOLED: "false"
+      AUTH_SECRET: ci-only-secret-000000000000000000000000
+      AUTH_URL: http://localhost:3000
+      NEXTAUTH_URL: http://localhost:3000
+      AUTH_TRUST_HOST: "true"
+      TEMPORAL_ADDRESS: 127.0.0.1:7233
+      TEMPORAL_NAMESPACE: default
+      TEMPORAL_TASK_QUEUE: procureflow
+      TEMPORAL_REWORK_ENABLED: "false"
+      INTERNAL_API_TOKEN: ci-internal-token
+      EMAIL_ADAPTER: console
+      NODE_ENV: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.34.5
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Cache Temporal CLI download
+        uses: actions/cache@v4
+        with:
+          path: .tools/temporal-cli
+          key: temporal-cli-1.9.1-${{ runner.os }}-${{ runner.arch }}
+
+      - name: Migrate and seed Postgres
+        run: |
+          pnpm db:migrate
+          pnpm db:seed
+
+      - name: Start stock Temporal CLI dev server
+        run: |
+          pnpm temporal:dev:stock > /tmp/temporal.log 2>&1 &
+          for i in $(seq 1 60); do
+            if (echo > /dev/tcp/127.0.0.1/7233) >/dev/null 2>&1; then
+              echo "Temporal is up"
+              break
+            fi
+            sleep 2
+          done
+          (echo > /dev/tcp/127.0.0.1/7233) >/dev/null 2>&1 || { cat /tmp/temporal.log; exit 1; }
+
+      - name: Workflow integration tests (@temporalio/testing)
+        run: pnpm test:workflows
+
+      - name: Start worker and web
+        run: |
+          pnpm --filter @procureflow/worker start > /tmp/worker.log 2>&1 &
+          pnpm --filter @procureflow/web dev > /tmp/web.log 2>&1 &
+          for i in $(seq 1 90); do
+            if curl -fsS http://localhost:3000/api/health >/dev/null 2>&1; then
+              echo "Web is healthy"
+              break
+            fi
+            sleep 2
+          done
+          curl -fsS http://localhost:3000/api/health || { cat /tmp/web.log; cat /tmp/worker.log; exit 1; }
+
+      - name: End-to-end smoke (login -> request -> approvals -> PO -> audit)
+        run: pnpm smoke
+
+      - name: Upload logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: stock-temporal-logs
+          path: |
+            /tmp/temporal.log
+            /tmp/worker.log
+            /tmp/web.log
+          if-no-files-found: ignore
+
+  temporal-rework-build:
+    name: Build reworked Temporal (compile-only)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: third_party/temporal/go.mod
+          cache: true
+          cache-dependency-path: third_party/temporal/go.sum
+
+      - name: Setup Node.js (for the cross-platform build wrapper)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Build server + ProcureFlow bootstrap
+        run: node scripts/temporal-build.mjs

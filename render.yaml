@@ -1,0 +1,97 @@
+# ProcureFlow — Render Blueprint (managed deployment)
+#
+# Managed split:
+#   - Web + worker run on Render.
+#   - PostgreSQL is Neon (pooled DATABASE_URL, direct DIRECT_URL).
+#   - Temporal is Temporal Cloud or another external Temporal endpoint.
+#   - The reworked Temporal under third_party/temporal is NOT deployed to Render.
+#
+# After the first deploy, set:
+#   AUTH_URL / NEXTAUTH_URL = https://<your-web-service>.onrender.com
+#   TEMPORAL_ADDRESS / TEMPORAL_NAMESPACE / TEMPORAL_API_KEY for Temporal Cloud
+#
+# Render sets RENDER_EXTERNAL_URL automatically; next.config.mjs falls back to it
+# for Auth.js URLs when AUTH_URL is unset.
+
+envVarGroups:
+  - name: procureflow-shared
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL
+        sync: false # Neon POOLED connection string
+      - key: DIRECT_URL
+        sync: false # Neon DIRECT connection string (migrations)
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DATABASE_POOLED
+        value: "true"
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: AUTH_TRUST_HOST
+        value: "true"
+      - key: TEMPORAL_ADDRESS
+        sync: false # e.g. your-namespace.a2.temporal.io:7233
+      - key: TEMPORAL_NAMESPACE
+        sync: false
+      - key: TEMPORAL_TASK_QUEUE
+        value: procureflow
+      - key: TEMPORAL_TLS
+        value: "true"
+      - key: TEMPORAL_API_KEY
+        sync: false
+      - key: TEMPORAL_REWORK_ENABLED
+        value: "false"
+      - key: TEMPORAL_UI_URL
+        sync: false
+      - key: AUTH_URL
+        sync: false
+      - key: EMAIL_ADAPTER
+        value: console
+      - key: EMAIL_FROM
+        value: procureflow@example.com
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SLACK_WEBHOOK_URL
+        sync: false
+      - key: ERP_ADAPTER
+        value: csv
+      - key: ERP_CSV_DIR
+        value: .data/erp
+      - key: STORAGE_ADAPTER
+        value: local
+      - key: STORAGE_DIR
+        value: .data/storage
+      - key: AI_RISK_SUMMARY_ENABLED
+        value: "true"
+      - key: INTERNAL_API_TOKEN
+        generateValue: true
+      - key: PROCUREFLOW_AUDIT_INTERCEPTOR_ENABLED
+        value: "true"
+      - key: PROCUREFLOW_WORKER_PLUGIN_ENABLED
+        value: "true"
+
+services:
+  - type: web
+    name: procureflow-web
+    runtime: node
+    plan: starter
+    region: oregon # keep the same region as Neon for latency
+    autoDeploy: true
+    buildCommand: corepack enable && pnpm install --frozen-lockfile && pnpm --filter @procureflow/web build
+    preDeployCommand: pnpm db:migrate
+    startCommand: pnpm --filter @procureflow/web start
+    healthCheckPath: /api/health
+    envVars:
+      - fromGroup: procureflow-shared
+
+  - type: worker
+    name: procureflow-worker
+    runtime: node
+    plan: starter
+    region: oregon
+    autoDeploy: true
+    buildCommand: corepack enable && pnpm install --frozen-lockfile
+    startCommand: pnpm --filter @procureflow/worker start
+    envVars:
+      - fromGroup: procureflow-shared

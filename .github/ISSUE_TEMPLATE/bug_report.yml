@@ -1,0 +1,41 @@
+name: Bug report
+description: Report a defect in ProcureFlow
+labels: ["bug"]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Sign in as ...
+        2. Submit a request for ...
+        3. Click ...
+    validations:
+      required: true
+  - type: dropdown
+    id: temporal
+    attributes:
+      label: Temporal runtime
+      options:
+        - Stock Temporal CLI (pnpm dev:stock-temporal)
+        - Reworked Temporal (pnpm dev)
+        - Temporal Cloud / external
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Include request IDs, Temporal workflow IDs and `/api/health` output. Do not paste secrets.
+      render: shell
+  - type: input
+    id: version
+    attributes:
+      label: Commit / version

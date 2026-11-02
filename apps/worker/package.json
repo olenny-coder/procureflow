@@ -1,0 +1,24 @@
+{
+  "name": "@procureflow/worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@procureflow/db": "workspace:*",
+    "@procureflow/integrations": "workspace:*",
+    "@procureflow/shared": "workspace:*",
+    "@procureflow/workflows": "workspace:*",
+    "@temporalio/worker": "1.25.0",
+    "dotenv": "16.4.7",
+    "tsx": "4.23.15"
+  },
+  "devDependencies": {
+    "@types/node": "20.19.43",
+    "typescript": "5.9.3"
+  }
+}
