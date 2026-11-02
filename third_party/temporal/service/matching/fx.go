@@ -1,0 +1,259 @@
+package matching
+
+import (
+	otellog "go.opentelemetry.io/otel/log"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/cluster"
+	"go.temporal.io/server/common/config"
+	"go.temporal.io/server/common/dynamicconfig"
+	"go.temporal.io/server/common/log"
+	"go.temporal.io/server/common/membership"
+	"go.temporal.io/server/common/metrics"
+	"go.temporal.io/server/common/namespace"
+	"go.temporal.io/server/common/persistence"
+	"go.temporal.io/server/common/persistence/visibility"
+	"go.temporal.io/server/common/persistence/visibility/manager"
+	"go.temporal.io/server/common/primitives"
+	"go.temporal.io/server/common/resource"
+	"go.temporal.io/server/common/rpc/interceptor"
+	"go.temporal.io/server/service"
+	"go.temporal.io/server/service/matching/configs"
+	"go.temporal.io/server/service/matching/workers"
+	"go.temporal.io/server/service/worker/workerdeployment"
+	"go.uber.org/fx"
+	"google.golang.org/grpc"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
+)
+
+var Module = fx.Options(
+	resource.Module,
+	workerdeployment.Module,
+	fx.Provide(ConfigProvider),
+	fx.Provide(PersistenceRateLimitingParamsProvider),
+	service.PersistenceLazyLoadedServiceResolverModule,
+	fx.Provide(ThrottledLoggerRpsFnProvider),
+	fx.Provide(ServiceErrorInterceptorProvider),
+	fx.Provide(ContextMetadataInterceptorProvider),
+	fx.Provide(RetryableInterceptorProvider),
+	fx.Provide(ErrorHandlerProvider),
+	fx.Provide(TelemetryInterceptorProvider),
+	fx.Provide(NamespaceRateLimitInterceptorProvider),
+	fx.Provide(RateLimitInterceptorProvider),
+	fx.Provide(VisibilityManagerConfigProvider),
+	fx.Provide(VisibilityManagerProvider),
+	fx.Provide(WorkersRegistryProvider),
+	fx.Provide(NewHandler),
+	fx.Provide(service.GrpcServerOptionsProvider),
+	fx.Provide(NamespaceReplicationQueueProvider),
+	fx.Provide(ServiceResolverProvider),
+	fx.Provide(ServerProvider),
+	fx.Provide(NewService),
+	fx.Provide(simplePartitionScalerFactoryProvider),
+	fx.Provide(taskQueueRateLimitFractionProviderProvider),
+	fx.Invoke(ServiceLifetimeHooks),
+)
+
+func ServerProvider(grpcServerOptions []grpc.ServerOption) *grpc.Server {
+	return grpc.NewServer(grpcServerOptions...)
+}
+
+func ConfigProvider(
+	dc *dynamicconfig.Collection,
+	persistenceConfig config.Persistence,
+	rateLimitFractionProvider TaskQueueRateLimitFractionProvider,
+) *Config {
+	cfg := NewConfig(dc)
+	cfg.RateLimitFractionProvider = rateLimitFractionProvider
+	return cfg
+}
+
+func ServiceErrorInterceptorProvider(
+	dc *dynamicconfig.Collection,
+	metricsHandler metrics.Handler,
+	logger log.Logger,
+) *interceptor.ServiceErrorInterceptor {
+	return interceptor.NewServiceErrorInterceptor(
+		dynamicconfig.MaxServiceErrorMessageLength.Get(dc),
+		metricsHandler,
+		logger,
+	)
+}
+
+func RetryableInterceptorProvider() *interceptor.RetryableInterceptor {
+	return interceptor.NewRetryableInterceptor(
+		common.CreateMatchingHandlerRetryPolicy(),
+		common.IsServiceHandlerRetryableError,
+	)
+}
+
+func ErrorHandlerProvider(
+	logger log.Logger,
+	serviceConfig *Config,
+) *interceptor.RequestErrorHandler {
+	return interceptor.NewRequestErrorHandler(
+		logger,
+		serviceConfig.LogAllReqErrors,
+	)
+}
+
+func TelemetryInterceptorProvider(
+	logger log.Logger,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+	serviceConfig *Config,
+	requestErrorHandler *interceptor.RequestErrorHandler,
+) *interceptor.TelemetryInterceptor {
+	return interceptor.NewTelemetryInterceptor(
+		namespaceRegistry,
+		metricsHandler,
+		logger,
+		serviceConfig.LogAllReqErrors,
+		requestErrorHandler,
+	)
+}
+
+func ThrottledLoggerRpsFnProvider(serviceConfig *Config) resource.ThrottledLoggerRpsFn {
+	return func() float64 { return float64(serviceConfig.ThrottledLogRPS()) }
+}
+
+func NamespaceRateLimitInterceptorProvider(
+	serviceConfig *Config,
+	namespaceRegistry namespace.Registry,
+	metricsHandler metrics.Handler,
+) interceptor.NamespaceRateLimitInterceptor {
+
+	namespaceRateFn := func(namespaceName string) float64 {
+		if namespaceRPS := serviceConfig.NamespaceRPS(namespaceName); namespaceRPS > 0 {
+			return float64(namespaceRPS)
+		}
+		// This fallback to host level rps limit when NamespaceRPS is not configured (i.e. 0)
+		return float64(serviceConfig.RPS())
+	}
+
+	return interceptor.NewNamespaceRateLimitInterceptor(
+		namespaceRegistry,
+		configs.NewNamespaceRateLimiter(
+			namespaceRateFn,
+			serviceConfig.OperatorRPSRatio,
+		),
+		configs.PollTaskAPISet, // set of APIs that will wait for token instead of immediate rejection
+		serviceConfig.PollWaitForNamespaceRateLimitToken,
+		metricsHandler,
+	)
+}
+
+func RateLimitInterceptorProvider(
+	serviceConfig *Config,
+) *interceptor.RateLimitInterceptor {
+	return interceptor.NewRateLimitInterceptor(
+		configs.NewPriorityRateLimiter(func() float64 { return float64(serviceConfig.RPS()) }, serviceConfig.OperatorRPSRatio),
+		map[string]int{
+			healthpb.Health_Check_FullMethodName: 0, // exclude health check requests from rate limiting.
+		},
+	)
+}
+
+// PersistenceRateLimitingParamsProvider is the same between services but uses different config sources.
+// if-case comes from resourceImpl.New.
+func PersistenceRateLimitingParamsProvider(
+	serviceConfig *Config,
+	persistenceLazyLoadedServiceResolver service.PersistenceLazyLoadedServiceResolver,
+	logger log.SnTaggedLogger,
+) service.PersistenceRateLimitingParams {
+	return service.NewPersistenceRateLimitingParams(
+		serviceConfig.PersistenceMaxQPS,
+		serviceConfig.PersistenceGlobalMaxQPS,
+		serviceConfig.PersistenceNamespaceMaxQPS,
+		serviceConfig.PersistenceGlobalNamespaceMaxQPS,
+		serviceConfig.PersistencePerShardNamespaceMaxQPS,
+		serviceConfig.OperatorRPSRatio,
+		serviceConfig.PersistenceQPSBurstRatio,
+		serviceConfig.PersistenceDynamicRateLimitingParams,
+		persistenceLazyLoadedServiceResolver,
+		logger,
+	)
+}
+
+func ServiceResolverProvider(
+	membershipMonitor membership.Monitor,
+) (membership.ServiceResolver, error) {
+	return membershipMonitor.GetResolver(primitives.MatchingService)
+}
+
+// TaskQueueReplicatorNamespaceReplicationQueue is used to ensure the replicator only gets set if global namespaces are
+// enabled on this cluster. See NamespaceReplicationQueueProvider below.
+type TaskQueueReplicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+
+func NamespaceReplicationQueueProvider(
+	namespaceReplicationQueue persistence.NamespaceReplicationQueue,
+	clusterMetadata cluster.Metadata,
+) TaskQueueReplicatorNamespaceReplicationQueue {
+	var replicatorNamespaceReplicationQueue persistence.NamespaceReplicationQueue
+	if clusterMetadata.IsGlobalNamespaceEnabled() {
+		replicatorNamespaceReplicationQueue = namespaceReplicationQueue
+	}
+	return replicatorNamespaceReplicationQueue
+}
+
+func VisibilityManagerConfigProvider(serviceConfig *Config) *visibility.ManagerConfig {
+	return &visibility.ManagerConfig{
+		EsProcessorConfig: nil, // matching visibility never write
+
+		MaxReadQPS:                     serviceConfig.VisibilityPersistenceMaxReadQPS,
+		MaxWriteQPS:                    serviceConfig.VisibilityPersistenceMaxWriteQPS,
+		OperatorRPSRatio:               serviceConfig.OperatorRPSRatio,
+		SlowQueryThreshold:             serviceConfig.VisibilityPersistenceSlowQueryThreshold,
+		EnableReadFromSecondary:        serviceConfig.EnableReadFromSecondaryVisibility,
+		EnableShadowReadMode:           serviceConfig.VisibilityEnableShadowReadMode,
+		SecondaryVisibilityWritingMode: dynamicconfig.GetStringPropertyFn(visibility.SecondaryVisibilityWritingModeOff), // matching visibility never write
+		DisableOrderByClause:           serviceConfig.VisibilityDisableOrderByClause,
+		EnableManualPagination:         serviceConfig.VisibilityEnableManualPagination,
+	}
+}
+
+func VisibilityManagerProvider(
+	managerParams visibility.ManagerParams,
+	managerConfig *visibility.ManagerConfig,
+) (manager.VisibilityManager, error) {
+	return visibility.NewManager(&managerParams, managerConfig)
+}
+
+func ContextMetadataInterceptorProvider(logger log.Logger) *interceptor.ContextMetadataInterceptor {
+	return interceptor.NewContextMetadataInterceptor(true, logger)
+}
+
+func ServiceLifetimeHooks(lc fx.Lifecycle, svc *Service) {
+	lc.Append(fx.StartStopHook(svc.Start, svc.Stop))
+}
+
+func WorkersRegistryProvider(
+	lc fx.Lifecycle,
+	metricsHandler metrics.Handler,
+	serviceConfig *Config,
+	eventLogger otellog.Logger,
+) workers.Registry {
+	return workers.NewRegistry(lc, workers.RegistryParams{
+		NumBuckets:                serviceConfig.WorkerRegistryNumBuckets,
+		TTL:                       serviceConfig.WorkerRegistryEntryTTL,
+		MinEvictAge:               serviceConfig.WorkerRegistryMinEvictAge,
+		MaxItems:                  serviceConfig.WorkerRegistryMaxEntries,
+		EvictionInterval:          serviceConfig.WorkerRegistryEvictionInterval,
+		MetricsHandler:            metricsHandler,
+		EventLogger:               eventLogger,
+		EnableWorkerConfigEvents:  serviceConfig.EnableWorkerConfigEvents,
+		EnableWorkerMetricsEvents: serviceConfig.EnableWorkerMetricsEvents,
+		MetricsConfig: workers.WorkerMetricsConfig{
+			EnablePluginMetrics:            serviceConfig.EnableWorkerPluginMetrics,
+			EnablePollerAutoscalingMetrics: serviceConfig.EnablePollerAutoscalingMetrics,
+			BreakdownMetricsByTaskQueue:    serviceConfig.BreakdownMetricsByTaskQueue,
+			ExternalPayloadsEnabled:        serviceConfig.ExternalPayloadsEnabled,
+		},
+	})
+}
+
+func simplePartitionScalerFactoryProvider(dc *dynamicconfig.Collection) PartitionScalerFactory {
+	return newSimplePartitionScalerFactory(
+		dynamicconfig.MatchingPartitionScaler.Get(dc),
+		dynamicconfig.MatchingNumTaskqueueWritePartitions.Get(dc),
+	)
+}

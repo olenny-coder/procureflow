@@ -1,0 +1,944 @@
+package update
+
+import (
+	"context"
+	"errors"
+	"slices"
+	"time"
+
+	commonpb "go.temporal.io/api/common/v1"
+	enumspb "go.temporal.io/api/enums/v1"
+	failurepb "go.temporal.io/api/failure/v1"
+	historypb "go.temporal.io/api/history/v1"
+	nexuspb "go.temporal.io/api/nexus/v1"
+	protocolpb "go.temporal.io/api/protocol/v1"
+	"go.temporal.io/api/serviceerror"
+	updatepb "go.temporal.io/api/update/v1"
+	chasmworkflow "go.temporal.io/server/chasm/lib/workflow"
+	"go.temporal.io/server/common"
+	"go.temporal.io/server/common/effect"
+	"go.temporal.io/server/common/future"
+	"go.temporal.io/server/common/metrics"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+)
+
+// pendingCallback holds a AttachCallbacks request that arrived while the Update
+// was in stateSent. These are flushed to the event store on acceptance
+// in onAcceptanceMsg. In-memory only; lost on registry clear/lock release.
+type pendingCallback struct {
+	requestID           string
+	completionCallbacks []*commonpb.Callback
+}
+
+type (
+	// Update docs are at /docs/architecture/workflow-update.md.
+	Update struct {
+		// These fields must be accessed only while holding workflow lock.
+		id    string
+		state state
+		// The `request` field holds the Update payload submitted with the original request. It is stored in the
+		// Registry to be sent to the worker and then written to history in an UpdateAccepted event.
+		// Therefore, it is nil when the Update in the Registry is in stateAccepted, stateCompleted etc., since then the
+		// request has already been written to an UpdateAccepted event.
+		// In addition, it is a nil when the Update in the Registry is in stateAdmitted AND it was created from an
+		// UpdateInfo.AdmissionInfo entry in MutableState. In this case, the reason it is a nil is the following:
+		// 1. The presence of the AdmissionInfo entry in MutableState implies that there is an UpdateAdmitted event in
+		//    history. This event always contains the original request payload.
+		// 2. Therefore, it is not necessary to write a second copy of the request payload to an UpdateAccepted event,
+		//    so we don't *need* to load the request into the Registry.
+		// 3. Furthermore, it is possible that many UpdateAdmitted events were created after a Reset or during conflict
+		//    resolution. In that situation, we *must not* attempt to load all the payloads into the Registry.
+		request *anypb.Any // of type *updatepb.Request
+		// originalReqID holds the first requestID with this update's ID. It is used for building the right link for
+		// cases where a duplicate update arrives - with same updateID but different reqID - while the first update request
+		// isn't durable yet(in-flight). Such duplicates would get a link to the OptionsUpdated event type instead of a
+		// link to an UpdateAccepted event. As this is only required for cases where original update is not yet durable, we
+		// do not require persistence for this field - if registry is cleared, the request itself should get retried at which
+		// point the originalReqID will be set again.
+		originalReqID   string
+		acceptedEventID int64
+		onComplete      func()
+		checkLimits     func(*updatepb.Request) error
+		instrumentation *instrumentation
+		admittedTime    time.Time
+		// pendingCallbacks buffers AttachCallbacks requests that arrive while
+		// the Update is in stateAdmitted or stateSent. Flushed to the event store in onAcceptanceMsg.
+		// Cleared when the Update is rejected or aborted. In-memory only; lost on lock release.
+		pendingCallbacks []pendingCallback
+		// nexusSerializationContext is the Nexus serialization context from the request that admitted this
+		// Update. Callers don't need to load it: it is populated on every path that produces an Update, i.e.
+		// Admit (from the request, before acceptance), Registry construction and Find (from UpdateInfo in
+		// MutableState), and TryResurrect (from the worker's echoed request). Unlike request, it is retained
+		// after acceptance. It is persisted in UpdateInfo only once an UpdateAdmitted or UpdateAccepted event
+		// is written; before that it is in-memory only, like request, since admission writes nothing so that
+		// rejected Updates leave no trace. It is nil if the Update is still in stateCreated, the request had no
+		// context, or the Update was persisted before this field existed.
+		nexusSerializationContext *nexuspb.PropagatedSerializationContext
+
+		// These fields might be accessed while not holding the workflow lock.
+		accepted future.Future[*failurepb.Failure]
+		outcome  future.Future[*updatepb.Outcome]
+	}
+
+	updateOpt func(*Update)
+)
+
+// New creates a new Update instance with the provided ID and set of options.
+func New(id string, opts ...updateOpt) *Update {
+	upd := &Update{
+		id:              id,
+		state:           stateCreated,
+		onComplete:      func() {},
+		checkLimits:     func(request *updatepb.Request) error { return nil },
+		instrumentation: &noopInstrumentation,
+		accepted:        future.NewFuture[*failurepb.Failure](),
+		outcome:         future.NewFuture[*updatepb.Outcome](),
+	}
+	for _, opt := range opts {
+		opt(upd)
+	}
+	return upd
+}
+
+func newAdmitted(id string, request *anypb.Any, opts ...updateOpt) *Update {
+	upd := &Update{
+		id:              id,
+		state:           stateAdmitted,
+		request:         request,
+		onComplete:      func() {},
+		instrumentation: &noopInstrumentation,
+		accepted:        future.NewFuture[*failurepb.Failure](),
+		outcome:         future.NewFuture[*updatepb.Outcome](),
+		admittedTime:    time.Now().UTC(),
+	}
+	for _, opt := range opts {
+		opt(upd)
+	}
+	return upd
+}
+
+func newAccepted(id string, acceptedEventID int64, opts ...updateOpt) *Update {
+	upd := &Update{
+		id:              id,
+		state:           stateAccepted,
+		request:         nil,
+		acceptedEventID: acceptedEventID,
+		onComplete:      func() {},
+		instrumentation: &noopInstrumentation,
+		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
+		outcome:         future.NewFuture[*updatepb.Outcome](),
+	}
+	for _, opt := range opts {
+		opt(upd)
+	}
+	return upd
+}
+
+func newCompleted(
+	id string,
+	acceptedEventID int64,
+	outcomeFuture *future.ReadyFutureImpl[*updatepb.Outcome],
+	opts ...updateOpt,
+) *Update {
+	upd := &Update{
+		id:              id,
+		state:           stateCompleted,
+		acceptedEventID: acceptedEventID,
+		onComplete:      func() {},
+		instrumentation: &noopInstrumentation,
+		accepted:        future.NewReadyFuture[*failurepb.Failure](nil, nil),
+		outcome:         outcomeFuture,
+	}
+	for _, opt := range opts {
+		opt(upd)
+	}
+	return upd
+}
+
+func withCompletionCallback(cb func()) updateOpt {
+	return func(u *Update) {
+		u.onComplete = cb
+	}
+}
+
+func withLimitChecker(cb func(req *updatepb.Request) error) updateOpt {
+	return func(u *Update) {
+		u.checkLimits = cb
+	}
+}
+
+func withNexusSerializationContext(nsCtx *nexuspb.PropagatedSerializationContext) updateOpt {
+	return func(u *Update) {
+		u.nexusSerializationContext = nsCtx
+	}
+}
+
+func withInstrumentation(i *instrumentation) updateOpt {
+	return func(u *Update) {
+		u.instrumentation = i
+	}
+}
+
+// WaitLifecycleStage waits until the Update has reached waitStage or a timeout.
+// If the Update reaches waitStage with no timeout, the outcome (if any) is returned.
+// If there is a timeout due to the supplied soft timeout,
+// then the most advanced stage known to have been reached is returned together with an empty outcome.
+// If there is a timeout due to supplied context deadline expiry, then the error is returned.
+// If waitStage is UNSPECIFIED, current, reached Status is returned immediately (even if ctx is expired).
+func (u *Update) WaitLifecycleStage(
+	ctx context.Context,
+	waitStage enumspb.UpdateWorkflowExecutionLifecycleStage,
+	softTimeout time.Duration,
+) (*Status, error) {
+
+	stCtx, stCancel := context.WithTimeout(ctx, softTimeout)
+	defer stCancel()
+
+	var err error
+
+	if u.outcome.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_COMPLETED {
+		var outcome *updatepb.Outcome
+		outcome, err = u.outcome.Get(stCtx)
+		if err == nil {
+			return statusCompleted(outcome), nil
+		}
+
+		// If err is coming from the user provided context (context.DeadlineExceeded or context.Canceled), then return it to the caller.
+		if errors.Is(err, ctx.Err()) {
+			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
+			return nil, err
+		}
+
+		// If err is not coming from stCtx, then it means that the error is coming from the future itself.
+		// If this err is not registryClearedErr, then it needs to be returned to the caller.
+		if !errors.Is(err, stCtx.Err()) && !errors.Is(err, registryClearedErr) {
+			return nil, err
+		}
+
+		// Only get here if there is an error, and this error is coming from stCtx or is registryClearedErr.
+		// In both cases, check if the Update has reached ACCEPTED stage.
+	}
+
+	// Update is not completed but maybe it is accepted.
+	if u.accepted.Ready() || waitStage == enumspb.UPDATE_WORKFLOW_EXECUTION_LIFECYCLE_STAGE_ACCEPTED {
+		// Using the same context which might be already expired, but if accepted future is ready,
+		// then it will return immediately without checking context deadline.
+		var rejection *failurepb.Failure
+		rejection, err = u.accepted.Get(stCtx)
+		if err == nil {
+			if rejection != nil {
+				return statusRejected(rejection), nil
+			}
+			// Even if only ACCEPTED stage was requested, check if Update was completed on the same WFT,
+			// and return Update result if it was.
+			if u.outcome.Ready() {
+				var outcome *updatepb.Outcome
+				outcome, err = u.outcome.Get(stCtx)
+				if err == nil {
+					return statusCompleted(outcome), nil
+				}
+				// If outcome future returned an error, then ACCEPTED is the most advanced stage reached,
+				// and it should be returned to the caller (because it was requested).
+				// This can happen when Workflow completes after accepting but not completing Update.
+			}
+			return statusAccepted(), nil
+		}
+
+		// If err is coming from the user provided context (context.DeadlineExceeded or context.Canceled), then return it to the caller.
+		if errors.Is(err, ctx.Err()) {
+			metrics.WorkflowExecutionUpdateClientTimeout.With(u.instrumentation.metrics).Record(1)
+			return nil, ctx.Err()
+		}
+
+		// If err is not coming from stCtx, then it means that the error is coming from the future itself.
+		// If this err is not registryClearedErr, then it needs to be returned to the caller.
+		if !errors.Is(err, stCtx.Err()) && !errors.Is(err, registryClearedErr) {
+			return nil, err
+		}
+	}
+
+	// Because of the checks above err (if is not nil) can be only registryClearedErr here.
+	// It is converted to Unavailable (retryable) error and returned to the caller.
+	// This error will be retried (by history service handler, or history service client in frontend,
+	// or SDK, or user client). This will recreate Update in the Registry.
+	if errors.Is(err, registryClearedErr) {
+		return nil, AbortedByServerErr
+	}
+
+	// TODO: assert(err == nil)
+
+	// If waitStage=COMPLETED or ACCEPTED and neither has been reached before the softTimeout has expired.
+	if stCtx.Err() != nil {
+		metrics.WorkflowExecutionUpdateServerTimeout.With(u.instrumentation.metrics).Record(1)
+		return statusAdmitted(), nil
+	}
+
+	// Only get here if waitStage=ADMITTED or UNSPECIFIED and neither ACCEPTED nor COMPLETED are reached.
+	// Return ADMITTED (as the most advanced stage reached) and empty outcome.
+	return statusAdmitted(), nil
+}
+
+// abort set Update futures with error or failure (which is passed to all waiters)
+// and set state to stateAborted. It is a terminal state. Update can't be changed after it is aborted.
+// abort uses effects and intermediate stateProvisionallyAborted to delay actual aborting until effects are applied.
+func (u *Update) abort(
+	reason AbortReason,
+	effects effect.Controller,
+) {
+	abortFailure, abortErr := reason.FailureError(u.state)
+	if abortFailure == nil && abortErr == nil {
+		// If both failure and err are nil, then it means that Update in this state can't be aborted.
+		return
+	}
+
+	// Clear any buffered AttachCallbacks callbacks defensively. Abort is called during
+	// cleanup (e.g., registry clear, workflow close) where a hard error would be
+	// worse than silently clearing.
+	u.pendingCallbacks = nil
+
+	u.instrumentation.countAborted(u.id, reason)
+	prevState := u.setState(stateProvisionallyAborted)
+
+	effects.OnAfterCommit(func(context.Context) {
+		if !u.state.Matches(stateSet(stateProvisionallyAborted | stateProvisionallyCompletedAfterAccepted)) {
+			return
+		}
+		var abortOutcome *updatepb.Outcome
+		if abortFailure != nil {
+			abortOutcome = &updatepb.Outcome{Value: &updatepb.Outcome_Failure{Failure: abortFailure}}
+		}
+
+		beforeCommitState := u.setState(stateAborted)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(abortOutcome, abortErr)
+		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
+			// If the Update is accepted *and* aborted in the same WFT (because WF was completed in the same WFT),
+			// then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance.OnAfterCommit.
+			//
+			// To prevent a race condition in WaitLifecycleStage, the accepted future
+			// has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.
+			// Now is the time to set it.
+			//
+			// Note that the Accepted state is skipped, and it transitions straight to Aborted.
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+			return
+		}
+
+		// If Update was aborted without being accepted,
+		// then accepted future must be also set with failure/error.
+		const preAcceptedStates = stateSet(stateCreated | stateProvisionallyAdmitted | stateAdmitted | stateSent | stateProvisionallyAccepted)
+		if prevState.Matches(preAcceptedStates) {
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(abortFailure, abortErr)
+		}
+	})
+	effects.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyAborted {
+			return
+		}
+		u.setState(prevState)
+	})
+}
+
+// Admit works if the Update is in any state, but if the state is anything
+// other than stateCreated then it just early returns a nil error. This
+// effectively gives us Update request deduplication by updateID. If the Update
+// is in stateCreated then it builds a protocolpb.Message that will be sent
+// when Send is called.
+func (u *Update) Admit(
+	req *updatepb.Request,
+	eventStore EventStore, // Will be useful for durable admitted.
+) error {
+	if u.state != stateCreated {
+		return nil
+	}
+	if err := u.checkLimits(req); err != nil {
+		// Remove the update from the registry immediately.
+		u.onComplete()
+		return err
+	}
+	if err := validateRequestMsg(u.id, req); err != nil {
+		return err
+	}
+	if !eventStore.CanAddEvent() {
+		// There shouldn't be any waiters before Update is admitted (this func returns).
+		// Call abort to seal the Update.
+		u.abort(AbortReasonWorkflowCompleted, eventStore)
+		// This error must be not nil.
+		_, abortErr := AbortReasonWorkflowCompleted.FailureError(stateCreated)
+		return abortErr
+	}
+
+	u.instrumentation.countRequestMsg()
+
+	// Marshal Update request here to return InvalidArgument to the API caller if it can't be marshaled.
+	reqAny, err := anypb.New(req)
+	if err != nil {
+		return serviceerror.NewInvalidArgumentf("unable to unmarshal request: %v", err)
+	}
+	u.request = reqAny
+	u.originalReqID = req.GetRequestId()
+	u.nexusSerializationContext = req.GetPropagatedNexusSerializationContext()
+
+	prevState := u.setState(stateProvisionallyAdmitted)
+	eventStore.OnAfterCommit(func(context.Context) {
+		if u.state != stateProvisionallyAdmitted {
+			return
+		}
+		u.setState(stateAdmitted)
+		u.admittedTime = time.Now().UTC()
+	})
+	eventStore.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyAdmitted {
+			return
+		}
+		u.setState(prevState)
+		var timeZero time.Time
+		u.admittedTime = timeZero
+	})
+
+	return nil
+}
+
+// AttachCallbacks attaches a request's completion callbacks to an Update that was
+// admitted by another request with the same Update ID. What it does depends on the
+// Update's state:
+//   - Admitted or sent: buffers the callbacks in memory. They are written to history
+//     in the same transaction as the UpdateAccepted event.
+//   - Accepted: writes a WorkflowExecutionOptionsUpdatedEvent with the callbacks.
+//   - Completed: attaches nothing. The caller receives the outcome synchronously.
+//
+// The admitting request's own callbacks are written with its UpdateAdmitted or
+// UpdateAccepted event, so they are not attached here.
+//
+// Returns true if an event was written, i.e. if mutable state needs to be persisted.
+// Returns an error if the request has callbacks but no request ID, or if the Update
+// is in a provisional state. In the latter case the caller should retry.
+func (u *Update) AttachCallbacks(
+	req *updatepb.Request,
+	eventStore EventStore,
+) (eventWritten bool, err error) {
+	if len(req.GetCompletionCallbacks()) == 0 {
+		return false, nil
+	}
+	if req.GetRequestId() == "" {
+		return false, serviceerror.NewInvalidArgumentf("invalid %T: request_id is required when completion_callbacks are set", req)
+	}
+
+	switch u.state {
+	case stateProvisionallyAccepted,
+		stateProvisionallyCompleted,
+		stateProvisionallyCompletedAfterAccepted,
+		stateProvisionallyAborted:
+		// Provisional states only exist inside a transaction that holds the workflow
+		// lock, so a new request should never see them. Ask the caller to retry if it does.
+		// This guard is kept defensively in case future code paths call AttachCallbacks within
+		// the same transaction.
+		return false, &serviceerror.ResourceExhausted{
+			Cause:   enumspb.RESOURCE_EXHAUSTED_CAUSE_BUSY_WORKFLOW,
+			Scope:   enumspb.RESOURCE_EXHAUSTED_SCOPE_NAMESPACE,
+			Message: "workflow update is not yet accepted, please retry",
+		}
+
+	case stateAdmitted, stateSent:
+		// This is the admitting request, or a retry of it. Its callbacks travel with
+		// u.request. A new Update is already in stateAdmitted here because the caller
+		// admits it with immediate effects.
+		if req.GetRequestId() == u.originalReqID {
+			return false, nil
+		}
+		// Otherwise the request is from another caller. The Update is not yet accepted, so
+		// buffer its callbacks. onAcceptanceMsg writes them in the same transaction as the
+		// UpdateAccepted event. If the Registry is cleared, the Update is aborted and the
+		// caller retries.
+		alreadyBuffered := slices.ContainsFunc(u.pendingCallbacks, func(pc pendingCallback) bool {
+			return pc.requestID == req.GetRequestId()
+		})
+		if !alreadyBuffered {
+			u.pendingCallbacks = append(u.pendingCallbacks, pendingCallback{
+				requestID:           req.GetRequestId(),
+				completionCallbacks: req.GetCompletionCallbacks(),
+			})
+		}
+		return false, nil
+
+	case stateAccepted:
+		// Write the callbacks as their own event, unless their request ID is already recorded
+		// on the workflow. This is the only case that writes an event, and so the only one that
+		// returns true.
+		return u.persistCallback(eventStore, req.GetRequestId(), req.GetCompletionCallbacks())
+
+	case stateCompleted:
+		// If the update is already completed, the result is returned synchronously
+		// in the UpdateWorkflowExecution response — no callback needed.
+		return false, nil
+
+	default:
+		// Callbacks cannot be attached in the remaining states. Log only for another request's
+		// callbacks. The admitting request's caller observes the Update's outcome directly.
+		if req.GetRequestId() != u.originalReqID {
+			u.instrumentation.logCallbacksNotAttached(u.id, req.GetRequestId(), u.state.String(), len(req.GetCompletionCallbacks()))
+		}
+		return false, nil
+	}
+}
+
+// EventLinkType reports the projected event type for an in-flight Update's RequestIDRef link.
+// Persisted updates resolve their links from mutable state before reaching this method,
+// so originalReqID is not persisted.
+func (u *Update) EventLinkType(requestID string) enumspb.EventType {
+	if u.originalReqID == requestID {
+		return enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_UPDATE_ACCEPTED
+	}
+	return enumspb.EVENT_TYPE_WORKFLOW_EXECUTION_OPTIONS_UPDATED
+}
+
+// persistPendingCallbacks writes one WorkflowExecutionOptionsUpdatedEvent per
+// buffered AttachCallbacks callback, skipping any whose requestID is already persisted.
+// Called from onAcceptanceMsg after the acceptance event has been written.
+//
+// NOTE: Each pending callback requires its own event because the API proto's
+// WorkflowUpdateOptionsUpdate carries a singular AttachedRequestId, and the
+// WorkflowUpdateOptions map is keyed by update ID (all entries here share u.id,
+// so only one map entry is possible per event). Each requestID must be durably
+// recorded in the event so that ApplyWorkflowExecutionOptionsUpdatedEvent can
+// call AttachRequestID during replay for correct deduplication.
+//
+// In practice, the number of buffered callbacks is very small (1-2): it requires
+// multiple concurrent callers to call AttachCallbacks while the update is in
+// stateAdmitted or stateSent. The execution's aggregate callback limits, which reserve buffered
+// callbacks at admission, bound the worst case.
+func (u *Update) persistPendingCallbacks(eventStore EventStore) error {
+	for _, pc := range u.pendingCallbacks {
+		if _, err := u.persistCallback(eventStore, pc.requestID, pc.completionCallbacks); err != nil {
+			return err
+		}
+	}
+	u.pendingCallbacks = nil
+	return nil
+}
+
+// persistCallback writes a single WorkflowExecutionOptionsUpdatedEvent to attach the
+// given requestID and completion callbacks, and deduplicate on requestID if already attached.
+// Returns true if an event was written.
+func (u *Update) persistCallback(
+	eventStore EventStore,
+	requestID string,
+	completionCallbacks []*commonpb.Callback,
+) (eventWritten bool, err error) {
+	// Callback is already attached, no need to update.
+	if requestID != "" && eventStore.HasRequestID(requestID) {
+		return false, nil
+	}
+	_, err = eventStore.AddWorkflowExecutionOptionsUpdatedEvent(
+		nil, false, "", nil, nil, "", nil, nil, false,
+		[]*historypb.WorkflowExecutionOptionsUpdatedEventAttributes_WorkflowUpdateOptionsUpdate{{
+			UpdateId:                    u.id,
+			AttachedRequestId:           requestID,
+			AttachedCompletionCallbacks: completionCallbacks,
+		}},
+	)
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// OnProtocolMessage delivers a message to the Update state machine. The Body field of
+// *protocolpb.Message parameter is expected to be one of *updatepb.Response,
+// *updatepb.Rejection, *updatepb.Acceptance. Writes to the EventStore
+// occur synchronously but externally observable effects on this Update (e.g.,
+// emitting an Outcome or an Accepted) are registered with the EventStore to be
+// applied after the durable Updates are committed. If the EventStore rolls back
+// its effects, this state machine does the same.
+//
+// If you modify the state machine, please update the diagram in /docs/architecture/workflow-update.md.
+func (u *Update) OnProtocolMessage(
+	protocolMsg *protocolpb.Message,
+	eventStore EventStore,
+) error {
+	if protocolMsg == nil {
+		return serviceerror.NewInvalidArgumentf("Update %s received nil message", u.id)
+	}
+
+	if protocolMsg.Body == nil {
+		return serviceerror.NewInvalidArgumentf("Update %s received message with nil body", u.id)
+	}
+
+	body, err := protocolMsg.Body.UnmarshalNew()
+	if err != nil {
+		return serviceerror.NewInvalidArgumentf("unable to unmarshal request: %v", err)
+	}
+
+	// If no new events can be added to the event store (e.g., workflow is completed),
+	// then only Rejection messages can be processed, because they don't create new events in the history.
+	// All other message types abort Update.
+	_, isRejection := body.(*updatepb.Rejection)
+	shouldAbort := !eventStore.CanAddEvent() && !isRejection
+	if shouldAbort {
+		u.abort(AbortReasonWorkflowCompleted, eventStore)
+		return nil
+	}
+
+	switch updMsg := body.(type) {
+	case *updatepb.Acceptance:
+		return u.onAcceptanceMsg(updMsg, eventStore)
+	case *updatepb.Rejection:
+		return u.onRejectionMsg(updMsg, eventStore)
+	case *updatepb.Response:
+		return u.onResponseMsg(updMsg, eventStore)
+	default:
+		return serviceerror.NewInvalidArgumentf("Message type %T not supported", body)
+	}
+}
+
+// needToSend returns true if outgoing message can be generated for the current Update state.
+// If includeAlreadySent is set to true, then it will return true even if Update was already sent but not processed by worker.
+func (u *Update) needToSend(includeAlreadySent bool) bool {
+	if includeAlreadySent {
+		return u.state.Matches(stateSet(stateAdmitted | stateSent))
+	}
+	return u.state.Matches(stateSet(stateAdmitted))
+}
+
+// Send move Update from stateAdmitted to stateSent and returns the message to be sent to worker.
+// If Update is not in expected stateAdmitted, Send does nothing and returns nil.
+// If includeAlreadySent is set to true, then Send will return a message even if Update was already sent but not processed by worker.
+// If Update lacks a request, then return nil; the request will be communicated to the worker via an UpdateAdmitted event.
+// Note: once Update moved to stateSent it never moves back to stateAdmitted.
+func (u *Update) Send(
+	includeAlreadySent bool,
+	sequencingID *protocolpb.Message_EventId,
+) *protocolpb.Message {
+	if !u.needToSend(includeAlreadySent) {
+		return nil
+	}
+
+	u.instrumentation.countSent()
+	if u.state == stateSent {
+		u.instrumentation.countSentAgain()
+	}
+
+	if u.state == stateAdmitted {
+		u.setState(stateSent)
+	}
+
+	if u.request == nil {
+		// This implies that the Update in the Registry derives from an UpdateAdmitted event exists;
+		// this event (which contains the request payload) is how the Update request will be communicated to the worker.
+		return nil
+	}
+	return &protocolpb.Message{
+		ProtocolInstanceId: u.id,
+		Id:                 u.outgoingMessageID(),
+		SequencingId:       sequencingID,
+		Body:               u.request,
+	}
+}
+
+// isSent checks if Update was sent to worker.
+func (u *Update) isSent() bool {
+	return u.state.Matches(stateSet(stateSent))
+}
+
+// outgoingMessageID returns the ID of the message that is used to Send the Update to the worker.
+func (u *Update) outgoingMessageID() string {
+	return u.id + "/request"
+}
+
+// onAcceptanceMsg expects the Update to be in stateSent (or stateAdmitted) and returns an
+// error if it finds otherwise. An event is written to the provided EventStore
+// and on commit the accepted future is completed and the Update transitions to
+// stateAccepted.
+func (u *Update) onAcceptanceMsg(
+	acpt *updatepb.Acceptance,
+	eventStore EventStore,
+) error {
+	// Normally Update goes from stateAdmitted to stateSent and then to stateAccepted,
+	// therefore, the only valid state here is stateSent.
+	// But if Update Registry is cleared after Update was sent to the worker,
+	// it will be recreated by retries in stateAdmitted, and then the worker can accept the previous (cleared) Update
+	// with the same updateID. Because it is, in fact, the same Update, server should process this accepts message w/o error.
+	// Therefore, stateAdmitted is also a valid state.
+	if err := u.checkStateSet(acpt, stateSet(stateSent|stateAdmitted)); err != nil {
+		return err
+	}
+	if err := validateAcceptanceMsg(acpt); err != nil {
+		return err
+	}
+	u.instrumentation.countAcceptanceMsg()
+
+	// If the in-registry Update lacks a request payload, this implies that there is an UpdateAdmitted event in
+	// history. In this case, we write the UpdateAccepted event without a request payload, since the UpdateAdmitted
+	// event has it.
+	//
+	// Thus, the following sequences of events are all possible, and SDK workers must handle them correctly:
+	// UpdateAdmitted(requestPayload)
+	// UpdateAdmitted(requestPayload)
+	// ...
+	// UpdateAccepted(nil)
+	// UpdateAccepted(requestPayload)
+	var acceptedRequest *updatepb.Request
+	if u.request != nil {
+		acceptedRequest = &updatepb.Request{}
+		if err := u.request.UnmarshalTo(acceptedRequest); err != nil {
+			return serviceerror.NewInternalf("unable to unmarshal original request: %v", err)
+		}
+	}
+
+	event, err := eventStore.AddWorkflowExecutionUpdateAcceptedEvent(
+		u.id,
+		u.outgoingMessageID(),
+		acpt.AcceptedRequestSequencingEventId,
+		acceptedRequest)
+	if err != nil {
+		return err
+	}
+	u.acceptedEventID = event.EventId
+
+	// Persist any callbacks that were buffered by AttachCallbacks while in stateSent or stateAdmitted.
+	// See persistPendingCallbacks for why this writes one event per pending entry.
+	if err := u.persistPendingCallbacks(eventStore); err != nil {
+		return err
+	}
+
+	prevState := u.setState(stateProvisionallyAccepted)
+	eventStore.OnAfterCommit(func(context.Context) {
+		if !u.state.Matches(stateSet(stateProvisionallyAccepted | stateProvisionallyCompleted | stateProvisionallyAborted)) {
+			return
+		}
+		u.request = nil
+
+		// If the Update is accepted *and* completed in the same WFT, then its state has transitioned
+		// from ProvisionallyAccepted to ProvisionallyCompleted in onResponseMsg by the
+		// time we get here.
+		//
+		// Now, to prevent a race condition in WaitLifecycleStage, the accepted future
+		// cannot be set here right now, as it must be set *after* the outcome future.
+		//
+		// So instead, the state is set to ProvisionallyCompletedAfterAccepted here,
+		// and onResponseMsg.OnAfterCommit callback will set the futures in the correct order.
+		if u.state == stateProvisionallyCompleted {
+			u.state = stateProvisionallyCompletedAfterAccepted
+			return
+		}
+		// If the Update is accepted *and* WF is completed in the same WFT, then its state has transitioned
+		// from ProvisionallyAccepted to ProvisionallyAborted in abort function by the
+		// time we get here.
+		//
+		// Now, to prevent a race condition in WaitLifecycleStage, the accepted future
+		// cannot be set here right now, as it must be set *after* the outcome future.
+		//
+		// Same ProvisionallyCompletedAfterAccepted is reused here (although it is
+		// technically ProvisionallyAbortedAfterAccepted), and abort.OnAfterCommit callback
+		// will set the futures in the correct order.
+		if u.state == stateProvisionallyAborted {
+			u.state = stateProvisionallyCompletedAfterAccepted
+			return
+		}
+		u.setState(stateAccepted)
+		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+	})
+	eventStore.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyAccepted {
+			return
+		}
+		u.acceptedEventID = common.EmptyEventID
+		u.pendingCallbacks = nil
+		u.setState(prevState)
+	})
+	return nil
+}
+
+// onRejectionMsg expects the Update state to be stateSent (or stateAdmitted) and returns
+// an error otherwise. On commit of buffered effects, the state
+// machine transitions to stateCompleted and the accepted and outcome futures
+// are both completed with the failurepb.Failure value from the updatepb.Rejection input message.
+func (u *Update) onRejectionMsg(
+	rej *updatepb.Rejection,
+	eventStore EventStore,
+) error {
+	// See comment in onAcceptanceMsg about stateAdmitted.
+	if err := u.checkStateSet(rej, stateSet(stateSent|stateAdmitted)); err != nil {
+		return err
+	}
+	if err := validateRejectionMsg(rej); err != nil {
+		return err
+	}
+	u.instrumentation.countRejectionMsg()
+	// Notify the event store so it can fire any completion callbacks that were
+	// registered at admission time (e.g., after reset/reapply) and clean up
+	// the update's mutable-state entry.
+	if err := eventStore.RejectWorkflowExecutionUpdate(u.id, rej.Failure); err != nil {
+		return err
+	}
+	// NOTE: u.pendingCallbacks is not cleared here because the rejection is not committed yet.
+	// reject clears it on commit, so a rolled back rejection keeps the buffered callbacks.
+	u.reject(rej.Failure, eventStore)
+	return nil
+}
+
+// rejects an Update with provided failure.
+func (u *Update) reject(
+	rejectionFailure *failurepb.Failure,
+	effects effect.Controller,
+) {
+	prevState := u.setState(stateProvisionallyCompleted)
+	effects.OnAfterCommit(func(context.Context) {
+		if u.state != stateProvisionallyCompleted {
+			return
+		}
+
+		// Callers of a rejected Update receive the rejection synchronously, so buffered
+		// callbacks are not attached. They are kept if the rejection is rolled back.
+		u.pendingCallbacks = nil
+		u.request = nil
+		u.setState(stateCompleted)
+		outcome := updatepb.Outcome{
+			Value: &updatepb.Outcome_Failure{Failure: rejectionFailure},
+		}
+		u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(rejectionFailure, nil)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(&outcome, nil)
+		u.onComplete()
+	})
+	effects.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyCompleted {
+			return
+		}
+		u.setState(prevState)
+	})
+}
+
+// onResponseMsg expects the Update to be in either stateProvisionallyAccepted
+// or stateAccepted and returns an error if it finds otherwise. On commit of
+// buffered effects, the state machine will transition to stateCompleted, and the
+// outcome future is completed with the updatepb.Outcome from the updatepb.Response input message.
+func (u *Update) onResponseMsg(
+	res *updatepb.Response,
+	eventStore EventStore,
+) error {
+	if err := u.checkStateSet(res, stateSet(stateProvisionallyAccepted|stateAccepted)); err != nil {
+		return err
+	}
+	if err := validateResponseMsg(u.id, res); err != nil {
+		return err
+	}
+	if _, err := eventStore.AddWorkflowExecutionUpdateCompletedEvent(u.acceptedEventID, res); err != nil {
+		return err
+	}
+	u.instrumentation.countResponseMsg()
+	prevState := u.setState(stateProvisionallyCompleted)
+	eventStore.OnAfterCommit(func(context.Context) {
+		if !u.state.Matches(stateSet(stateProvisionallyCompleted | stateProvisionallyCompletedAfterAccepted)) {
+			return
+		}
+		beforeCommitState := u.setState(stateCompleted)
+		u.outcome.(*future.FutureImpl[*updatepb.Outcome]).Set(res.GetOutcome(), nil)
+		if beforeCommitState == stateProvisionallyCompletedAfterAccepted {
+			// If the Update is accepted *and* completed in the same WFT,
+			// then its state is ProvisionallyCompletedAfterAccepted here, set by onAcceptance.OnAfterCommit.
+			//
+			// To prevent a race condition in WaitLifecycleStage, the accepted future
+			// has not been set by OnAcceptance earlier, as it must be set *after* the outcome future.
+			// Now is the time to set it.
+			//
+			// Note that the Accepted state is skipped, and it transitions straight to Completed.
+			u.accepted.(*future.FutureImpl[*failurepb.Failure]).Set(nil, nil)
+		}
+		u.onComplete()
+	})
+	eventStore.OnAfterRollback(func(context.Context) {
+		if u.state != stateProvisionallyCompleted {
+			return
+		}
+		u.setState(prevState)
+	})
+	return nil
+}
+
+func (u *Update) checkStateSet(msg proto.Message, allowed stateSet) error {
+	if u.state.Matches(allowed) {
+		return nil
+	}
+	u.instrumentation.invalidStateTransition(u.id, msg, u.state)
+	return serviceerror.NewInvalidArgumentf("invalid state transition attempted for Update %s: "+
+		"received %T message while in state %s", u.id, msg, u.state)
+}
+
+// setState assigns the current state to a new value returning the original value.
+func (u *Update) setState(newState state) state {
+	prevState := u.state
+	u.state = newState
+	u.instrumentation.stateChange(u.id, prevState, newState)
+	return prevState
+}
+
+func (u *Update) GetSize() int {
+	size := len(u.id)
+	size += proto.Size(u.request)
+	size += proto.Size(u.nexusSerializationContext)
+	if u.accepted.Ready() {
+		res, _ := u.accepted.Get(context.Background())
+		size += res.Size()
+	}
+	if u.outcome.Ready() {
+		res, _ := u.outcome.Get(context.Background())
+		size += res.Size()
+	}
+	return size
+}
+
+// NexusSerializationContext returns the Nexus serialization context of the request that admitted this Update.
+// For a deduplicated request, this is the original request's context. A nil result means the Update has no
+// context (see the nexusSerializationContext field), not that it still needs to be loaded.
+// It must be invoked while holding the workflow lock.
+func (u *Update) NexusSerializationContext() *nexuspb.PropagatedSerializationContext {
+	return u.nexusSerializationContext
+}
+
+// AcceptedEventID should only be invoked after the accepted/outcome futures are set.
+// This is because acceptedEventID is only written while holding the workflow lock and
+// before the accepted/outcome futures are set.
+func (u *Update) AcceptedEventID() int64 {
+	if !u.accepted.Ready() && !u.outcome.Ready() {
+		return common.EmptyEventID
+	}
+	return u.acceptedEventID
+}
+
+// IsCompleted reports whether the Update has completed, in which case its outcome is final and
+// no further callbacks will be attached to it.
+func (u *Update) IsCompleted() bool {
+	return u.state == stateCompleted
+}
+
+// inFlightCallbacks returns the completion callbacks this Update will persist if it is accepted.
+// See Registry.InFlightCallbacks.
+func (u *Update) inFlightCallbacks() ([]chasmworkflow.CallbackAddition, error) {
+	if !u.state.Matches(stateSet(stateProvisionallyAdmitted | stateAdmitted | stateSent)) {
+		return nil, nil
+	}
+	var inFlight []chasmworkflow.CallbackAddition
+	// The request is nil for an Update admitted from an UpdateAdmitted event, whose callbacks
+	// were persisted along with that event.
+	if u.request != nil {
+		req := &updatepb.Request{}
+		if err := u.request.UnmarshalTo(req); err != nil {
+			return nil, serviceerror.NewInternalf("unable to unmarshal original request: %v", err)
+		}
+		if len(req.GetCompletionCallbacks()) > 0 {
+			inFlight = append(inFlight, chasmworkflow.CallbackAddition{
+				UpdateID:  u.id,
+				RequestID: req.GetRequestId(),
+				Callbacks: req.GetCompletionCallbacks(),
+			})
+		}
+	}
+	for _, pc := range u.pendingCallbacks {
+		inFlight = append(inFlight, chasmworkflow.CallbackAddition{
+			UpdateID:  u.id,
+			RequestID: pc.requestID,
+			Callbacks: pc.completionCallbacks,
+		})
+	}
+	return inFlight, nil
+}
