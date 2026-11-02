@@ -41,7 +41,11 @@ export default async function ApprovalsPage() {
     <div className="space-y-6">
       <PageHeader
         title="Approval inbox"
-        description={`Pending ${user.role === "ADMIN" ? "across all roles" : user.role.toLowerCase()} approval tasks, ordered by due date.`}
+        description={
+          user.role === "ADMIN"
+            ? "Pending approval tasks across all roles, ordered by due date."
+            : `Pending ${user.role.toLowerCase()} approval tasks, ordered by due date.`
+        }
       />
 
       <div className="grid gap-3 sm:grid-cols-3">

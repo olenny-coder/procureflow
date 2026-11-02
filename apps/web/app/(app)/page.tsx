@@ -123,7 +123,9 @@ export default async function DashboardPage() {
           hint={
             user.role === "ADMIN"
               ? "All pending approvals visible to admins, including escalations."
-              : `Pending ${user.role === "APPROVER" ? "manager" : user.role.toLowerCase()} approvals.`
+              : user.role === "REQUESTER"
+                ? "Approvers act on submitted requests; you can track progress below."
+                : `Pending ${user.role === "APPROVER" ? "manager" : user.role.toLowerCase()} approvals.`
           }
           tone={stats.pendingApprovals > 0 ? "amber" : "emerald"}
         />
@@ -173,7 +175,6 @@ export default async function DashboardPage() {
               <THead>
                 <TR>
                   <TH>Request</TH>
-                  <TH className="hidden md:table-cell">Vendor</TH>
                   <TH>Amount</TH>
                   <TH>Status</TH>
                   <TH className="hidden sm:table-cell">Updated</TH>
@@ -190,17 +191,15 @@ export default async function DashboardPage() {
                       >
                         {request.title}
                       </Link>
-                      <p className="mt-0.5 text-xs text-slate-500">
-                        {request.department}
-                        {request.revision > 1 ? ` · revision ${request.revision}` : ""}
-                      </p>
-                    </TD>
-                    <TD className="hidden md:table-cell">
-                      <div className="flex items-center gap-2">
-                        <span className="max-w-[160px] truncate">{request.vendorName}</span>
+                      <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500">
+                        <span className="truncate">
+                          {request.department}
+                          {request.revision > 1 ? ` · rev ${request.revision}` : ""} ·{" "}
+                          {request.vendorName}
+                        </span>
                         <span
                           className={cn(
-                            "inline-flex rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
+                            "inline-flex shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-medium ring-1 ring-inset",
                             RISK_STYLES[request.vendorRiskLevel],
                           )}
                         >
@@ -314,7 +313,7 @@ export default async function DashboardPage() {
                 {purchaseOrders.map((po) => (
                   <TR key={po.id}>
                     <TD>
-                      <Link href={`/requests/${po.requestId}`} className="font-mono text-xs font-semibold text-slate-900 hover:text-brand-700">
+                      <Link href={`/requests/${po.requestId}`} className="whitespace-nowrap font-mono text-xs font-semibold text-slate-900 hover:text-brand-700">
                         {po.poNumber}
                       </Link>
                       <p className="mt-0.5 text-xs text-slate-500">

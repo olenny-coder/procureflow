@@ -16,6 +16,14 @@ every action is attributed in an audit trail.
 - Real adapter boundaries for email, Slack, ERP, storage and AI risk summaries.
 - Runnable on Render + Neon with an external Temporal endpoint.
 
+## Product tour
+
+| Login | Dashboard |
+| --- | --- |
+| ![Login](docs/screenshots/login.png) | ![Dashboard](docs/screenshots/dashboard.png) |
+
+![Vendor directory with onboarding status, risk and compliance workflow actions](docs/screenshots/vendors.png)
+
 ---
 
 ## Architecture

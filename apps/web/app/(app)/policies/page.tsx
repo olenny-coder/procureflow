@@ -1,4 +1,4 @@
-﻿import { ShieldX, SlidersHorizontal } from "lucide-react";
+import { ShieldX, SlidersHorizontal } from "lucide-react";
 import { formatMoney } from "@procureflow/shared/domain";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -16,11 +16,11 @@ function summarizeConditions(policy: EditablePolicy): string[] {
   const min = conditions.minAmountCents;
   const max = conditions.maxAmountCents;
   if (typeof min === "number" && typeof max === "number") {
-    parts.push(`${formatMoney(min)} â€“ ${formatMoney(max)}`);
+    parts.push(`${formatMoney(min)} - ${formatMoney(max)}`);
   } else if (typeof min === "number") {
-    parts.push(`â‰¥ ${formatMoney(min)}`);
+    parts.push(`>= ${formatMoney(min)}`);
   } else if (typeof max === "number") {
-    parts.push(`â‰¤ ${formatMoney(max)}`);
+    parts.push(`<= ${formatMoney(max)}`);
   }
   if (Array.isArray(conditions.departments) && conditions.departments.length > 0) {
     parts.push(`Dept: ${conditions.departments.join(", ")}`);
@@ -71,7 +71,7 @@ export default async function PoliciesPage() {
 
       <div className="rounded-2xl border border-brand-100 bg-brand-50/50 p-4 text-xs leading-relaxed text-brand-900">
         <span className="font-semibold">Evaluation semantics:</span> enabled rules whose conditions all
-        match are merged. Approvers are de-duplicated by role and executed manager â†’ finance â†’ admin. An
+        match are merged. Approvers are de-duplicated by role and executed manager {"->"} finance {"->"} admin. An
         empty approver list means auto-approve. If no rule matches, the request falls back to admin review.
         Lower priority numbers sort first.
       </div>
@@ -123,14 +123,14 @@ export default async function PoliciesPage() {
                   <div className="mt-2 flex flex-wrap items-center gap-1.5">
                     {policy.approvers.length === 0 ? (
                       <span className="rounded-lg bg-emerald-50 px-2 py-1 text-xs font-medium text-emerald-700">
-                        Auto-approve â†’ PO
+                        Auto-approve {"->"} PO
                       </span>
                     ) : (
                       policy.approvers.map((approver, index) => (
                         <span key={`${approver.role}-${index}`} className="flex items-center gap-1.5">
-                          {index > 0 ? <span className="text-slate-300">â†’</span> : null}
+                          {index > 0 ? <span className="text-slate-300">{"->"}</span> : null}
                           <span className="rounded-lg bg-brand-50 px-2 py-1 text-xs font-medium text-brand-700">
-                            {humanize(approver.role)} Â· {approver.dueInHours}h
+                            {humanize(approver.role)} - {approver.dueInHours}h
                           </span>
                         </span>
                       ))
