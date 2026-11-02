@@ -1,7 +1,7 @@
 import { ApiError, assertSameOrigin, handleApiError, json, requireApiUser } from "@/lib/api";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { getVendorForApi } from "@/lib/queries";
-import { startVendorOnboarding } from "@/lib/temporal";
+import { startVendorOnboarding } from "@/lib/orchestration";
 
 export const dynamic = "force-dynamic";
 

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "@procureflow/db";
-import { getTemporalConfig } from "@procureflow/shared";
-import { getTemporalHealth } from "@/lib/temporal";
+import { getOrchestrationConfig } from "@procureflow/shared";
+import { getOrchestrationHealth } from "@/lib/orchestration";
 import { json } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -25,9 +25,9 @@ async function checkDatabase(): Promise<{ ok: boolean; latencyMs: number; error?
 
 export async function GET() {
   const started = Date.now();
-  const [database, temporal] = await Promise.all([checkDatabase(), getTemporalHealth()]);
-  const config = getTemporalConfig();
-  const healthy = database.ok && temporal.ok;
+  const [database, orchestration] = await Promise.all([checkDatabase(), getOrchestrationHealth()]);
+  const config = getOrchestrationConfig();
+  const healthy = database.ok && orchestration.ok;
 
   return json(
     {
@@ -42,17 +42,17 @@ export async function GET() {
           latencyMs: database.latencyMs,
           ...(database.error ? { error: database.error } : {}),
         },
-        temporal: {
-          ok: temporal.ok,
-          address: temporal.address,
-          namespace: temporal.namespace,
-          taskQueue: temporal.taskQueue,
-          serverVersion: temporal.serverVersion,
-          reworkEnabled: temporal.reworkEnabled,
-          ...(temporal.error ? { error: temporal.error } : {}),
+        orchestration: {
+          ok: orchestration.ok,
+          address: orchestration.address,
+          namespace: orchestration.namespace,
+          taskQueue: orchestration.taskQueue,
+          engineVersion: orchestration.serverVersion,
+          searchAttributesEnabled: orchestration.reworkEnabled,
+          ...(orchestration.error ? { error: orchestration.error } : {}),
         },
       },
-      temporalReworkEnabled: config.reworkEnabled,
+      features: { searchAttributes: config.reworkEnabled },
     },
     healthy ? 200 : 503,
   );

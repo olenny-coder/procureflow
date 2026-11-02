@@ -140,7 +140,7 @@ export function AppShell({
             </div>
             <div className="hidden items-center gap-2 text-xs font-medium text-slate-500 lg:flex">
               <Sparkles className="h-3.5 w-3.5 text-brand-500" />
-              Durable approvals powered by Temporal
+              Durable approvals, audit-ready by default
             </div>
             <div className="flex items-center gap-3">
               <span className="hidden text-xs text-slate-500 sm:block">{user.department}</span>

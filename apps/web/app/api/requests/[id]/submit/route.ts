@@ -5,7 +5,7 @@ import {
   requestWorkflowId,
   signalResubmission,
   startPurchaseRequestWorkflow,
-} from "@/lib/temporal";
+} from "@/lib/orchestration";
 import { WORKFLOW_IDS } from "@procureflow/shared";
 
 export const dynamic = "force-dynamic";

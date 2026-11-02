@@ -5,7 +5,7 @@ import {
   type ConnectionOptions,
 } from "@temporalio/client";
 import {
-  getTemporalConfig,
+  getOrchestrationConfig,
   type DecisionSignalInput,
   type PurchaseRequestWorkflowInput,
   type PurchaseRequestWorkflowState,
@@ -24,7 +24,7 @@ import {
 let clientPromise: Promise<Client> | undefined;
 
 function connectionOptions(): ConnectionOptions {
-  const config = getTemporalConfig();
+  const config = getOrchestrationConfig();
   return {
     address: config.address,
     ...(config.tls ? { tls: true } : {}),
@@ -32,9 +32,9 @@ function connectionOptions(): ConnectionOptions {
   };
 }
 
-export function getTemporalClient(): Promise<Client> {
+export function getOrchestrationClient(): Promise<Client> {
   if (!clientPromise) {
-    const config = getTemporalConfig();
+    const config = getOrchestrationConfig();
     clientPromise = (async () => {
       const connection = await Connection.connect(connectionOptions());
       return new Client({ connection, namespace: config.namespace });
@@ -62,8 +62,8 @@ export async function startPurchaseRequestWorkflow(params: {
   actorRole: Role;
   workflowId: string;
 }): Promise<StartWorkflowResult> {
-  const config = getTemporalConfig();
-  const client = await getTemporalClient();
+  const config = getOrchestrationConfig();
+  const client = await getOrchestrationClient();
   const input: PurchaseRequestWorkflowInput = {
     requestId: params.requestId,
     actorId: params.actorId,
@@ -99,7 +99,7 @@ export async function signalApprovalDecision(params: {
   actorRole: Role;
   comment?: string;
 }): Promise<void> {
-  const client = await getTemporalClient();
+  const client = await getOrchestrationClient();
   const handle = client.workflow.getHandle(params.workflowId);
   const input: DecisionSignalInput = {
     taskId: params.taskId,
@@ -116,7 +116,7 @@ export async function signalResubmission(params: {
   actorRole: Role;
   comment?: string;
 }): Promise<void> {
-  const client = await getTemporalClient();
+  const client = await getOrchestrationClient();
   const handle = client.workflow.getHandle(params.workflowId);
   const input: ResubmitSignalInput = {
     actorId: params.actorId,
@@ -144,7 +144,7 @@ export async function queryPurchaseRequestState(
   workflowId: string,
 ): Promise<PurchaseRequestWorkflowState | null> {
   try {
-    const client = await withTimeout(getTemporalClient(), 2_500, "temporal_client");
+    const client = await withTimeout(getOrchestrationClient(), 2_500, "orchestration_client");
     const handle = client.workflow.getHandle(workflowId);
     return await withTimeout(
       handle.query<PurchaseRequestWorkflowState>(QUERIES.getState),
@@ -160,8 +160,8 @@ export async function startVendorOnboarding(params: {
   vendorId: string;
   actorId: string;
 }): Promise<StartWorkflowResult> {
-  const config = getTemporalConfig();
-  const client = await getTemporalClient();
+  const config = getOrchestrationConfig();
+  const client = await getOrchestrationClient();
   const workflowId = WORKFLOW_IDS.vendorOnboarding(params.vendorId);
   try {
     const handle = await client.workflow.start(WORKFLOW_NAMES.vendorOnboarding, {
@@ -186,7 +186,7 @@ export async function signalVendorDecision(params: {
   comment?: string;
   riskLevel?: "LOW" | "MEDIUM" | "HIGH";
 }): Promise<void> {
-  const client = await getTemporalClient();
+  const client = await getOrchestrationClient();
   const workflowId = WORKFLOW_IDS.vendorOnboarding(params.vendorId);
   const input: VendorDecisionSignalInput = {
     actorId: params.actorId,
@@ -212,7 +212,7 @@ export async function signalVendorDecision(params: {
 
 export async function queryVendorState(workflowId: string): Promise<VendorOnboardingWorkflowState | null> {
   try {
-    const client = await withTimeout(getTemporalClient(), 2_500, "temporal_client");
+    const client = await withTimeout(getOrchestrationClient(), 2_500, "orchestration_client");
     const handle = client.workflow.getHandle(workflowId);
     return await withTimeout(
       handle.query<VendorOnboardingWorkflowState>(VENDOR_QUERIES.getVendorState),
@@ -225,8 +225,8 @@ export async function queryVendorState(workflowId: string): Promise<VendorOnboar
 }
 
 export async function startNotificationOutboxWorkflow(limit: number): Promise<{ workflowId: string; runId: string }> {
-  const config = getTemporalConfig();
-  const client = await getTemporalClient();
+  const config = getOrchestrationConfig();
+  const client = await getOrchestrationClient();
   const workflowId = `notification-outbox-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const handle = await client.workflow.start(WORKFLOW_NAMES.notificationOutbox, {
     taskQueue: config.taskQueue,
@@ -236,7 +236,7 @@ export async function startNotificationOutboxWorkflow(limit: number): Promise<{ 
   return { workflowId: handle.workflowId, runId: handle.firstExecutionRunId };
 }
 
-export interface TemporalHealth {
+export interface OrchestrationHealth {
   ok: boolean;
   address: string;
   namespace: string;
@@ -246,15 +246,15 @@ export interface TemporalHealth {
   error?: string;
 }
 
-export async function getTemporalHealth(): Promise<TemporalHealth> {
-  const config = getTemporalConfig();
+export async function getOrchestrationHealth(): Promise<OrchestrationHealth> {
+  const config = getOrchestrationConfig();
   let connection: Connection | undefined;
   try {
-    connection = await withTimeout(Connection.connect(connectionOptions()), 3_000, "temporal_connect");
+    connection = await withTimeout(Connection.connect(connectionOptions()), 3_000, "orchestration_connect");
     const info = await withTimeout(
       connection.workflowService.getSystemInfo({}),
       3_000,
-      "temporal_system_info",
+      "orchestration_system_info",
     );
     return {
       ok: true,

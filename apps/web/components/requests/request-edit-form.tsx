@@ -339,8 +339,8 @@ export function RequestEditForm({
           </div>
           <div className="rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
             Saving the request updates the PostgreSQL read model and writes a `REQUEST_UPDATED` audit
-            event. Resubmitting sends the `resubmit` signal to the existing Temporal workflow, which
-            re-evaluates policy and starts a new approval chain.
+            event. Resubmitting sends the resubmit signal to the existing workflow, which re-evaluates
+            policy and starts a new approval chain.
           </div>
         </CardContent>
       </Card>

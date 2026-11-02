@@ -49,6 +49,9 @@ export function getTemporalConfig(): TemporalConfig {
   };
 }
 
+/** Product-neutral alias used by the app layer. */
+export const getOrchestrationConfig = getTemporalConfig;
+
 export interface DatabaseConfig {
   url: string;
   directUrl: string;

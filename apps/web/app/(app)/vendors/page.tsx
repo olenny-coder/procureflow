@@ -53,7 +53,7 @@ export default async function VendorsPage() {
           <div>
             <CardTitle>All vendors</CardTitle>
             <p className="mt-0.5 text-sm text-slate-500">
-              {vendors.length} vendor{vendors.length === 1 ? "" : "s"} · onboarding decisions run as a Temporal
+              {vendors.length} vendor{vendors.length === 1 ? "" : "s"} · onboarding decisions run as a durable
               workflow.
             </p>
           </div>

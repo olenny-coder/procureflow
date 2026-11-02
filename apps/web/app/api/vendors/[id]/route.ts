@@ -12,7 +12,7 @@ import {
 } from "@/lib/api";
 import { recordAudit } from "@/lib/audit";
 import { getVendorForApi } from "@/lib/queries";
-import { queryVendorState } from "@/lib/temporal";
+import { queryVendorState } from "@/lib/orchestration";
 import { WORKFLOW_IDS } from "@procureflow/shared";
 
 export const dynamic = "force-dynamic";

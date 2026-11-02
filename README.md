@@ -1,20 +1,20 @@
 # ProcureFlow
 
-**Procurement orchestration on Temporal.** Intake → policy evaluation → configurable
-approvals → purchase order → append-only audit, built as a production-lean MVP.
+**Procurement orchestration with durable workflows.** Intake → policy evaluation →
+configurable approvals → purchase order → append-only audit, built as a
+production-lean MVP.
 
 ProcureFlow is a focused Zip-style procurement platform: employees submit purchase
 requests, a deterministic policy engine decides who must approve, the approval chain
-is held durably by Temporal, purchase orders are generated after final approval, and
-every action is attributed in an audit trail.
+is held durably by the workflow engine, purchase orders are generated after final
+approval, and every action is attributed in an audit trail.
 
-- TypeScript end to end (Next.js App Router, Temporal TypeScript SDK, Drizzle).
+- TypeScript end to end (Next.js App Router, durable workflow SDK, Drizzle).
 - PostgreSQL locally (Docker/portable) and on Neon in production.
 - Durable workflows with signals, queries, timers, SLA escalation and retries.
-- Config-only switching between the locally reworked Temporal, stock Temporal and
-  Temporal Cloud.
+- Config-only switching between local, stock and managed workflow endpoints.
 - Real adapter boundaries for email, Slack, ERP, storage and AI risk summaries.
-- Runnable on Render + Neon with an external Temporal endpoint.
+- Runnable on Render + Neon with an external workflow engine endpoint.
 
 ## Product tour
 

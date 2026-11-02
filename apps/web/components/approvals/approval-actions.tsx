@@ -67,7 +67,7 @@ export function ApprovalActions({
         <p className="text-sm font-semibold text-slate-900">
           Your decision{role ? ` · ${role.toLowerCase()} step` : ""}
         </p>
-        <span className="text-[11px] text-slate-400">Signals the Temporal workflow</span>
+        <span className="text-[11px] text-slate-400">Sends a durable decision signal</span>
       </div>
       <Textarea
         value={comment}

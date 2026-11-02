@@ -9,7 +9,7 @@ import {
 } from "@/lib/api";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { getVendorForApi } from "@/lib/queries";
-import { signalVendorDecision } from "@/lib/temporal";
+import { signalVendorDecision } from "@/lib/orchestration";
 
 export const dynamic = "force-dynamic";
 

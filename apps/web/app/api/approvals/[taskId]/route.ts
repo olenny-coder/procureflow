@@ -9,7 +9,7 @@ import {
 } from "@/lib/api";
 import { enforceRateLimit } from "@/lib/rate-limit";
 import { getApprovalTaskForApi } from "@/lib/queries";
-import { signalApprovalDecision } from "@/lib/temporal";
+import { signalApprovalDecision } from "@/lib/orchestration";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";
@@ -45,7 +45,7 @@ export async function POST(request: Request, context: { params: { taskId: string
       );
     }
     if (!pr.workflowId) {
-      throw new ApiError(409, "This request has no active Temporal workflow", "workflow_missing");
+      throw new ApiError(409, "This request has no active orchestration workflow", "workflow_missing");
     }
 
     await signalApprovalDecision({

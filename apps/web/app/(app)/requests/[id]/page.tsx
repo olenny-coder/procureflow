@@ -31,7 +31,7 @@ import { ApprovalActions } from "@/components/approvals/approval-actions";
 import { RequestActions } from "@/components/requests/request-actions";
 import { getRequestDetail } from "@/lib/queries";
 import { requirePageUser } from "@/lib/session";
-import { queryPurchaseRequestState } from "@/lib/temporal";
+import { queryPurchaseRequestState } from "@/lib/orchestration";
 import { RISK_STYLES, cn, humanize } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
@@ -74,10 +74,6 @@ export default async function RequestDetailPage({ params }: { params: { id: stri
     user.id !== detail.requesterId &&
     (user.role === "ADMIN" || currentTask?.approverRole === user.role);
   const isOwner = detail.requesterId === user.id;
-
-  const temporalUiUrl = `${process.env.TEMPORAL_UI_URL ?? "http://localhost:8233"}/namespaces/${
-    process.env.TEMPORAL_NAMESPACE ?? "default"
-  }/workflows/${detail.workflowId ?? ""}`;
 
   return (
     <div className="space-y-6">
@@ -228,7 +224,7 @@ export default async function RequestDetailPage({ params }: { params: { id: stri
                   Approval chain
                 </CardTitle>
                 <p className="mt-0.5 text-sm text-slate-500">
-                  Managed by Temporal workflow <span className="font-mono text-xs">{detail.workflowId}</span>
+                  Managed by durable workflow <span className="font-mono text-xs">{detail.workflowId}</span>
                 </p>
               </div>
               <Badge tone="brand">Step {detail.currentStep || 0}</Badge>
@@ -305,7 +301,7 @@ export default async function RequestDetailPage({ params }: { params: { id: stri
                   <p className="font-semibold">An approver requested changes.</p>
                   <p className="mt-1 text-orange-700">
                     Update the request if needed, then use <strong>Resubmit for approval</strong>. The same
-                    Temporal workflow resumes with a new policy evaluation.
+                    workflow resumes with a new policy evaluation.
                   </p>
                 </div>
               ) : null}
@@ -363,7 +359,7 @@ export default async function RequestDetailPage({ params }: { params: { id: stri
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Workflow className="h-4 w-4 text-slate-400" />
-                Temporal workflow
+                Workflow execution
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -417,21 +413,10 @@ export default async function RequestDetailPage({ params }: { params: { id: stri
                 </>
               ) : (
                 <p className="text-xs leading-relaxed text-slate-500">
-                  Workflow state is queried live from Temporal. If the worker or server is offline, the
-                  PostgreSQL read model above remains authoritative.
+                  Workflow state is queried live from the orchestration service. If the worker or server is
+                  offline, the PostgreSQL read model above remains authoritative.
                 </p>
               )}
-              {detail.workflowId ? (
-                <a
-                  href={temporalUiUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs font-medium text-brand-600 hover:text-brand-700"
-                >
-                  Open in Temporal UI
-                  <ExternalLink className="h-3.5 w-3.5" />
-                </a>
-              ) : null}
             </CardContent>
           </Card>
 

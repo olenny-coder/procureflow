@@ -10,7 +10,7 @@ import {
 } from "@/lib/api";
 import { requireApiUser } from "@/lib/api";
 import { enforceRateLimit } from "@/lib/rate-limit";
-import { startNotificationOutboxWorkflow } from "@/lib/temporal";
+import { startNotificationOutboxWorkflow } from "@/lib/orchestration";
 import { logger } from "@/lib/logger";
 
 export const dynamic = "force-dynamic";

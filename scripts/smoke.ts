@@ -1,13 +1,13 @@
 /**
  * End-to-end smoke test against a running ProcureFlow stack.
  *
- * Prerequisites: Postgres, Temporal, the worker and the Next.js app are running,
+ * Prerequisites: Postgres, the workflow engine, the worker and the Next.js app are running,
  * and the database has been migrated + seeded.
  *
  *   pnpm smoke
  *   BASE_URL=http://localhost:3000 pnpm smoke
  *
- * It exercises the real HTTP API, real Temporal workflows and the real database:
+ * It exercises the real HTTP API, real durable workflows and the real database:
  * login -> create request -> submit -> manager approve -> finance approve ->
  * PO issued -> audit trail visible.
  */
@@ -191,12 +191,12 @@ async function main(): Promise<void> {
 
   const health = await requester.json<{
     status: string;
-    checks: { database: { ok: boolean }; temporal: { ok: boolean; address: string } };
+    checks: { database: { ok: boolean }; orchestration: { ok: boolean; address: string } };
   }>("/api/health");
   if (health.status !== "ok") {
     throw new Error(`Health check is not OK: ${JSON.stringify(health)}`);
   }
-  console.log(`  ✓ health ok (Temporal ${health.checks.temporal.address})`);
+  console.log(`  ✓ health ok (workflow engine ${health.checks.orchestration.address})`);
 
   await requester.login("requester@procureflow.dev");
   await approver.login("approver@procureflow.dev");
@@ -232,7 +232,7 @@ async function main(): Promise<void> {
   if (!submitResponse.ok) {
     throw new Error(`Submit failed: ${submitResponse.status} ${await submitResponse.text()}`);
   }
-  console.log("  ✓ submitted request; Temporal workflow started");
+  console.log("  ✓ submitted request; durable workflow started");
 
   const detail = await waitFor<RequestDetailResponse>(
     "approval chain",

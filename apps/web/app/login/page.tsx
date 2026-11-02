@@ -44,8 +44,8 @@ export default async function LoginPage({
               Procurement without the chase.
             </h1>
             <p className="mt-5 text-[15px] leading-relaxed text-white/70">
-              One durable workflow per purchase request. Policy decides the approval chain, Temporal
-              holds the state, and every decision lands in an append-only audit trail.
+              One durable workflow per purchase request. Policy decides the approval chain, the workflow
+              engine holds the state, and every decision lands in an append-only audit trail.
             </p>
           </div>
 
@@ -70,7 +70,7 @@ export default async function LoginPage({
         </div>
 
         <div className="relative flex items-center gap-4 text-xs text-white/40">
-          <span>Temporal TypeScript SDK</span>
+          <span>Durable orchestration</span>
           <span className="h-1 w-1 rounded-full bg-white/20" />
           <span>PostgreSQL + Drizzle</span>
           <span className="h-1 w-1 rounded-full bg-white/20" />
