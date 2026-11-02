@@ -366,6 +366,7 @@ export async function createApprovalPlan(
   if (input.chain.length === 0) {
     nonRetryable("EmptyApprovalChain", "createApprovalPlan requires at least one approval step");
   }
+  let requestRevision = 0;
   const now = Date.now();
 
   const result = await db.transaction(async (tx) => {
@@ -375,6 +376,7 @@ export async function createApprovalPlan(
       .where(eq(purchaseRequests.id, input.requestId))
       .limit(1);
     if (!request) nonRetryable("RequestNotFound", `Purchase request ${input.requestId} does not exist`);
+    requestRevision = request.revision;
 
     await tx
       .update(approvalTasks)
@@ -449,7 +451,9 @@ export async function createApprovalPlan(
     action: AUDIT_ACTIONS.APPROVAL_TASKS_CREATED,
     actorId: null,
     metadata: { tasks: result.tasks.map((task) => ({ step: task.stepOrder, role: task.role })) },
-    dedupeKey: `${input.workflowId}:tasks:${result.tasks.map((task) => task.taskId).join(":")}`,
+    dedupeKey: `${input.workflowId}:tasks:${requestRevision}:${result.tasks
+      .map((task) => task.taskId)
+      .join(":")}`,
   });
 
   logger.info("approval_plan_created", {
@@ -489,7 +493,7 @@ export async function sendApprovalNotification(
       ].join("\n"),
       dedupeKey: `${input.workflowId}:approval-email:${input.taskId}:${recipient.id}:${
         input.escalation ? "escalated" : "initial"
-      }`,
+      }:r${row.request.revision}`,
       metadata: { requestId: input.requestId, taskId: input.taskId, stepOrder: input.stepOrder },
     });
     outboxIds.push(id);
@@ -504,7 +508,7 @@ export async function sendApprovalNotification(
     } - step ${input.stepOrder} (${input.role}). ${link}`,
     dedupeKey: `${input.workflowId}:approval-slack:${input.taskId}:${
       input.escalation ? "escalated" : "initial"
-    }`,
+    }:r${row.request.revision}`,
     metadata: { requestId: input.requestId, taskId: input.taskId },
   });
   outboxIds.push(slackId);
@@ -660,7 +664,7 @@ export async function recordApprovalDecision(
       comment: input.comment ?? null,
       resultingStatus: outcome.status,
     },
-    dedupeKey: `${input.workflowId}:decision:${input.taskId}:${input.action}`,
+    dedupeKey: `${input.workflowId}:decision:${input.taskId}:${input.action}:r${request.revision}`,
   });
 
   logger.info("approval_decision_recorded", {
@@ -767,7 +771,7 @@ export async function escalateApprovalTask(
       newDueAt: dueAt.toISOString(),
       requester: row.requester.name,
     },
-    dedupeKey: `${input.workflowId}:escalation:${task.id}`,
+    dedupeKey: `${input.workflowId}:escalation:${task.id}:r${row.request.revision}`,
   });
 
   logger.warn("approval_escalated", {
@@ -789,6 +793,11 @@ export async function escalateApprovalTask(
 
 export async function expireApprovalTask(input: ExpireApprovalInput): Promise<{ status: string }> {
   const db = getDb();
+  const [requestMeta] = await db
+    .select({ revision: purchaseRequests.revision })
+    .from(purchaseRequests)
+    .where(eq(purchaseRequests.id, input.requestId))
+    .limit(1);
   await db.transaction(async (tx) => {
     await tx
       .update(approvalTasks)
@@ -821,7 +830,7 @@ export async function expireApprovalTask(input: ExpireApprovalInput): Promise<{ 
     action: AUDIT_ACTIONS.APPROVAL_EXPIRED,
     actorId: null,
     metadata: { taskId: input.taskId, stepOrder: input.stepOrder, reason: input.reason },
-    dedupeKey: `${input.workflowId}:expired:${input.taskId}`,
+    dedupeKey: `${input.workflowId}:expired:${input.taskId}:r${requestMeta?.revision ?? 0}`,
   });
 
   logger.warn("approval_expired", {

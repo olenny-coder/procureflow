@@ -115,6 +115,7 @@ interface RequestDetailResponse {
   request: {
     id: string;
     status: string;
+    revision: number;
     totalAmountCents: number;
     purchaseOrder: { poNumber: string; status: string } | null;
     approvalTasks: Array<{ id: string; stepOrder: number; approverRole: string; status: string }>;
@@ -346,6 +347,78 @@ async function main(): Promise<void> {
   }
   console.log(
     `  ✓ auto-approved $450 request issued ${autoFinal.request.purchaseOrder?.poNumber} with no approval tasks`,
+  );
+
+  // ---- Changes requested -> resubmit signal -> revision 2 -> PO ------------
+  const changeCreated = await requester.json<CreatedRequest>("/api/requests", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      title: `Smoke revision flow ${Date.now()}`,
+      justification: "A revision-cycle test for the approval workflow.",
+      department: "Engineering",
+      urgency: "NORMAL",
+      category: "SOFTWARE",
+      vendorId: vendor.id,
+      currency: "USD",
+      items: [{ description: "Annual design tool seat", quantity: 1, unitPrice: 1200 }],
+    }),
+  });
+  const changeRequestId = changeCreated.request.id;
+  const changeSubmit = await requester.request(`/api/requests/${changeRequestId}/submit`, {
+    method: "POST",
+  });
+  if (!changeSubmit.ok) {
+    throw new Error(`Revision submit failed: ${changeSubmit.status} ${await changeSubmit.text()}`);
+  }
+  const changeTask = await waitFor<ApprovalRow>("approver task for revision flow", async () => {
+    const data = await approver.json<{ items: ApprovalRow[] }>("/api/approvals");
+    return data.items.find((item) => item.requestId === changeRequestId) ?? null;
+  });
+  const changeResponse = await approver.request(`/api/approvals/${changeTask.taskId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action: "REQUEST_CHANGES", comment: "Please add more detail to the scope." }),
+  });
+  if (!changeResponse.ok) {
+    throw new Error(`Request changes failed: ${changeResponse.status} ${await changeResponse.text()}`);
+  }
+  await waitFor("changes requested state", async () => {
+    const data = await requester.json<RequestDetailResponse>(`/api/requests/${changeRequestId}`);
+    return data.request.status === "CHANGES_REQUESTED" ? data : null;
+  });
+  const resubmitResponse = await requester.request(`/api/requests/${changeRequestId}/submit`, {
+    method: "POST",
+  });
+  if (!resubmitResponse.ok) {
+    throw new Error(`Resubmit failed: ${resubmitResponse.status} ${await resubmitResponse.text()}`);
+  }
+  await waitFor("revision 2 approval chain", async () => {
+    const data = await requester.json<RequestDetailResponse>(`/api/requests/${changeRequestId}`);
+    return data.request.revision === 2 && data.request.status === "IN_APPROVAL" ? data : null;
+  });
+  await approveTask(approver, changeRequestId, "APPROVER", "Revision looks good.");
+  await approveTask(finance, changeRequestId, "FINANCE", "Revision budget confirmed.");
+  const changeFinal = await waitFor<RequestDetailResponse>(
+    "revision purchase order",
+    async () => {
+      const data = await requester.json<RequestDetailResponse>(`/api/requests/${changeRequestId}`);
+      return data.request.status === "PO_ISSUED" && data.request.purchaseOrder ? data : null;
+    },
+    60_000,
+  );
+  const revisionActions = changeFinal.request.audit.map((event) => event.action);
+  const count = (action: string) => revisionActions.filter((entry) => entry === action).length;
+  if (count("APPROVAL_TASKS_CREATED") < 2 || count("REQUEST_RESUBMITTED") < 1) {
+    throw new Error(
+      `Revision audit trail is incomplete: ${JSON.stringify(revisionActions)}`,
+    );
+  }
+  console.log(
+    `  ✓ changes requested -> resubmitted -> revision 2 -> ${changeFinal.request.purchaseOrder?.poNumber}`,
+  );
+  console.log(
+    `  ✓ revision audit preserved (${count("APPROVAL_TASKS_CREATED")} approval plans, ${count("APPROVAL_GRANTED")} decisions)`,
   );
 
   console.log("\nSMOKE TEST PASSED");
