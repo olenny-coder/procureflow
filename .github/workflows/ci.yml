@@ -88,7 +88,6 @@ jobs:
       TEMPORAL_REWORK_ENABLED: "false"
       INTERNAL_API_TOKEN: ci-internal-token
       EMAIL_ADAPTER: console
-      NODE_ENV: test
     steps:
       - name: Checkout
         uses: actions/checkout@v4
