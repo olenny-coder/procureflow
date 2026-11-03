@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
 import { Logo } from "@/components/brand/logo";
@@ -28,7 +29,9 @@ export default async function LoginPage({
         />
         <div className="relative">
           <div>
-            <Logo tone="dark" markClassName="h-10 w-10" />
+            <Link href="/" aria-label="ProcureFlow home" className="inline-flex transition-opacity hover:opacity-80">
+              <Logo tone="dark" markClassName="h-10 w-10" />
+            </Link>
             <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">
               Procurement OS
             </p>
@@ -79,7 +82,9 @@ export default async function LoginPage({
       <section className="flex items-center justify-center px-5 py-12 sm:px-10">
         <div className="w-full max-w-md animate-fade-up">
           <div className="mb-8 lg:hidden">
-            <Logo tone="light" markClassName="h-9 w-9" />
+            <Link href="/" aria-label="ProcureFlow home" className="inline-flex">
+              <Logo tone="light" markClassName="h-9 w-9" />
+            </Link>
           </div>
           <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Welcome back</h2>
           <p className="mt-1.5 text-sm text-slate-500">

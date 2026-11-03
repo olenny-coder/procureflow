@@ -105,43 +105,8 @@
   }
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .motion-ready [data-reveal] {
-    opacity: 0;
-    transform: translateY(22px);
-    transition:
-      opacity 700ms cubic-bezier(0.22, 1, 0.36, 1),
-      transform 700ms cubic-bezier(0.22, 1, 0.36, 1);
-    transition-delay: var(--reveal-delay, 0ms);
-    will-change: opacity, transform;
-  }
-
-  .motion-ready [data-reveal].is-revealed {
-    opacity: 1;
-    transform: translateY(0);
-    will-change: auto;
-  }
-
-  .motion-ready .workflow-rail::before {
-    content: "";
-    position: absolute;
-    top: -1px;
-    left: 0;
-    width: 100%;
-    height: 1px;
-    background: #2f6df6;
-    transform: scaleX(0);
-    transform-origin: left;
-    transition: transform 1400ms cubic-bezier(0.22, 1, 0.36, 1) 250ms;
-  }
-
-  .motion-ready .workflow-rail.is-revealed::before {
-    transform: scaleX(1);
-  }
-
-  .motion-ready .flow-node {
-    animation: node-pulse 4.5s ease-in-out infinite;
-  }
+.flow-node {
+  animation: node-pulse 4.5s ease-in-out infinite;
 }
 
 @keyframes node-pulse {
@@ -156,12 +121,8 @@
 
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up,
-  .animate-pulse-line {
+  .animate-pulse-line,
+  .flow-node {
     animation: none !important;
-  }
-
-  .motion-ready [data-reveal] {
-    opacity: 1;
-    transform: none;
   }
 }

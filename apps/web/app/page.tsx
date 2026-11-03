@@ -14,8 +14,10 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
-import { LandingMotion } from "@/components/marketing/landing-motion";
 import { HeroRequestPanel } from "@/components/marketing/hero-panel";
+import { CountUp } from "@/components/motion/count-up";
+import { PressableAnchor, PressableLink } from "@/components/motion/pressable";
+import { Reveal } from "@/components/motion/reveal";
 
 export const metadata: Metadata = {
   title: "ProcureFlow — Every purchase. One clear path.",
@@ -166,7 +168,6 @@ export default function LandingPage() {
   return (
     <div className="bg-paper">
       <MarketingNav />
-      <LandingMotion />
 
       <main>
         {/* Hero */}
@@ -191,19 +192,19 @@ export default function LandingPage() {
                   see.
                 </p>
                 <div className="mt-8 flex flex-wrap items-center gap-3 animate-fade-up [animation-delay:210ms]">
-                  <Link
+                  <PressableLink
                     href="/login"
                     className="group inline-flex h-11 items-center gap-3 bg-brand-500 px-5 text-[14px] font-medium text-white transition hover:bg-brand-400"
                   >
                     Start a request
                     <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                  </Link>
-                  <a
+                  </PressableLink>
+                  <PressableAnchor
                     href="#workflow"
                     className="inline-flex h-11 items-center gap-3 border border-white/20 px-5 text-[14px] font-medium text-white/80 transition hover:border-white/40 hover:text-white"
                   >
                     See how it works
-                  </a>
+                  </PressableAnchor>
                 </div>
                 <div className="mt-10 flex animate-fade-up flex-wrap gap-x-7 gap-y-3 border-t border-white/10 pt-4 font-mono text-[10px] uppercase tracking-[0.14em] text-white/35 [animation-delay:280ms]">
                   <span className="inline-flex items-center gap-2">
@@ -223,7 +224,7 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="mt-14 grid grid-cols-2 border-t border-white/10 sm:grid-cols-3 lg:grid-cols-5" data-reveal>
+            <Reveal className="mt-14 grid grid-cols-2 border-t border-white/10 sm:grid-cols-3 lg:grid-cols-5" delay={0.1}>
               {FLOW.map(([number, label, copy]) => (
                 <div key={number} className="border-b border-white/10 py-4 sm:border-b-0 lg:border-r lg:last:border-r-0 lg:pl-4 lg:first:pl-0">
                   <div className="flex items-center gap-2">
@@ -234,14 +235,14 @@ export default function LandingPage() {
                   <p className="mt-1 pl-3.5 text-[11px] text-white/35">{copy}</p>
                 </div>
               ))}
-            </div>
+            </Reveal>
           </div>
         </section>
 
         {/* Proof */}
         <section className="bg-paper text-ink-900">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]" data-reveal>
+            <Reveal className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]">
               <SectionLabel>Proof</SectionLabel>
               <div>
                 <h2 className="max-w-4xl text-[clamp(2.6rem,4.6vw,3.9rem)] font-medium leading-[1.02] tracking-[-0.045em]">
@@ -252,34 +253,32 @@ export default function LandingPage() {
                   reconstructed audit trail after the fact.
                 </p>
               </div>
-            </div>
+            </Reveal>
 
             <div className="mt-16 grid border-y border-ink-900/10 md:grid-cols-3">
               {[
                 ["3×", "faster approval cycles", "Structured intake and policy routing remove the back-and-forth."],
                 ["100%", "decisions audited", "Every approval, rejection and change request is attributed."],
                 ["0", "purchases outside policy", "Amount, vendor risk and urgency are evaluated before any PO."],
-              ].map(([stat, label, copy], index) => (
-                <div
+              ].map(([, label, copy], index) => (
+                <Reveal
                   key={label}
-                  data-reveal
-                  style={{ transitionDelay: `${index * 90}ms` }}
+                  delay={index * 0.09}
                   className={`py-7 md:px-7 ${index > 0 ? "border-t border-ink-900/10 md:border-l md:border-t-0" : ""} ${index === 0 ? "md:pl-0" : ""}`}
                 >
-                  <p
-                    data-count={index === 0 ? 3 : index === 1 ? 100 : 0}
-                    data-suffix={index === 0 ? "×" : index === 1 ? "%" : ""}
-                    className="text-[clamp(3.6rem,6vw,5rem)] font-medium leading-none tracking-[-0.06em] tabular-nums"
-                  >
-                    {stat}
+                  <p className="text-[clamp(3.6rem,6vw,5rem)] font-medium leading-none tracking-[-0.06em] tabular-nums">
+                    <CountUp
+                      value={index === 0 ? 3 : index === 1 ? 100 : 0}
+                      suffix={index === 0 ? "×" : index === 1 ? "%" : ""}
+                    />
                   </p>
                   <p className="mt-4 text-[14px] font-medium text-ink-900">{label}</p>
                   <p className="mt-1 max-w-xs text-[13px] leading-relaxed text-ink-900/45">{copy}</p>
-                </div>
+                </Reveal>
               ))}
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-4" data-reveal>
+            <Reveal className="mt-6 flex flex-wrap items-center justify-between gap-4" delay={0.12}>
               <div className="flex flex-wrap gap-2">
                 {["Audit-ready", "Role-based access", "Configurable policy", "ERP handoff"].map((badge) => (
                   <span
@@ -291,26 +290,28 @@ export default function LandingPage() {
                   </span>
                 ))}
               </div>
-              <Link
+              <PressableLink
                 href="/login"
                 className="group inline-flex items-center gap-2 text-[13px] font-medium text-ink-900"
               >
                 Open the demo
                 <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-              </Link>
-            </div>
+              </PressableLink>
+            </Reveal>
           </div>
         </section>
 
         {/* Platform */}
         <section id="platform" className="scroll-mt-16 bg-ink-900 text-white">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="border-t border-white/10 pt-5" data-reveal>
+            <Reveal className="border-t border-white/10 pt-5">
               <SectionLabel light>Platform</SectionLabel>
-            </div>
-            <h2 className="mx-auto mt-8 max-w-5xl text-center text-[clamp(2.7rem,5vw,4.4rem)] font-medium leading-[1.0] tracking-[-0.05em]" data-reveal>
-              Composable. Accountable. Auditable.
-            </h2>
+            </Reveal>
+            <Reveal delay={0.06}>
+              <h2 className="mx-auto mt-8 max-w-5xl text-center text-[clamp(2.7rem,5vw,4.4rem)] font-medium leading-[1.0] tracking-[-0.05em]">
+                Composable. Accountable. Auditable.
+              </h2>
+            </Reveal>
             <div className="mt-16 grid border-t border-white/10 md:grid-cols-3">
               {[
                 {
@@ -332,10 +333,9 @@ export default function LandingPage() {
                   href: "#security",
                 },
               ].map((item, index) => (
-                <div
+                <Reveal
                   key={item.title}
-                  data-reveal
-                  style={{ transitionDelay: `${index * 90}ms` }}
+                  delay={index * 0.09}
                   className={`py-9 md:px-9 ${index > 0 ? "border-t border-white/10 md:border-l md:border-t-0" : "md:pl-0"}`}
                 >
                   <div className="h-[90px]">
@@ -343,11 +343,14 @@ export default function LandingPage() {
                   </div>
                   <h3 className="mt-8 text-[26px] font-medium tracking-[-0.035em]">{item.title}</h3>
                   <p className="mt-3 max-w-sm text-[14px] leading-relaxed text-white/50">{item.copy}</p>
-                  <a href={item.href} className="group mt-6 inline-flex items-center gap-2 border-b border-white/25 pb-1 text-[12px] font-medium text-white/85">
+                  <PressableAnchor
+                    href={item.href}
+                    className="group mt-6 inline-flex items-center gap-2 border-b border-white/25 pb-1 text-[12px] font-medium text-white/85"
+                  >
                     See how
                     <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" />
-                  </a>
-                </div>
+                  </PressableAnchor>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -356,7 +359,7 @@ export default function LandingPage() {
         {/* Workflow */}
         <section id="workflow" className="scroll-mt-16 bg-paper text-ink-900">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]" data-reveal>
+            <Reveal className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]">
               <SectionLabel>Workflow</SectionLabel>
               <div>
                 <h2 className="max-w-4xl text-[clamp(2.6rem,4.8vw,4.05rem)] font-medium leading-[1.0] tracking-[-0.05em]">
@@ -368,9 +371,9 @@ export default function LandingPage() {
                   finance.
                 </p>
               </div>
-            </div>
+            </Reveal>
 
-            <div className="workflow-rail relative mt-14 grid border-t border-ink-900/10 md:grid-cols-5" data-reveal>
+            <Reveal className="workflow-rail relative mt-14 grid border-t border-ink-900/10 md:grid-cols-5">
               {STEPS.map((step, index) => (
                 <div
                   key={step.label}
@@ -387,10 +390,10 @@ export default function LandingPage() {
                   </p>
                 </div>
               ))}
-            </div>
+            </Reveal>
 
             <div className="mt-14 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="min-w-0 border border-ink-900/15 bg-white p-5 sm:p-6" data-reveal>
+              <Reveal className="min-w-0 border border-ink-900/15 bg-white p-5 sm:p-6">
                 <div className="flex items-center justify-between border-b border-ink-900/10 pb-3">
                   <div className="flex items-center gap-2">
                     <FileCheck2 className="h-4 w-4 text-brand-600" />
@@ -439,9 +442,12 @@ export default function LandingPage() {
                   </span>
                   <span className="font-mono text-[9px] text-brand-600">completed</span>
                 </div>
-              </div>
+              </Reveal>
 
-              <div className="min-w-0 border border-ink-900/15 bg-white p-5 sm:p-6" data-reveal style={{ transitionDelay: "90ms" }}>
+              <Reveal
+                delay={0.08}
+                className="min-w-0 border border-ink-900/15 bg-white p-5 sm:p-6"
+              >
                 <div className="flex items-center justify-between border-b border-ink-900/10 pb-3">
                   <div className="flex items-center gap-2">
                     <GitBranch className="h-4 w-4 text-brand-600" />
@@ -476,7 +482,7 @@ export default function LandingPage() {
                     Policy evaluated against three rules. Both roles accepted. PO generated and synced.
                   </p>
                 </div>
-              </div>
+              </Reveal>
             </div>
           </div>
         </section>
@@ -484,7 +490,7 @@ export default function LandingPage() {
         {/* Controls */}
         <section id="controls" className="scroll-mt-16 bg-brand-500 text-white">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="grid gap-8 border-t border-white/25 pt-5 md:grid-cols-[160px_1fr]" data-reveal>
+            <Reveal className="grid gap-8 border-t border-white/25 pt-5 md:grid-cols-[160px_1fr]">
               <SectionLabel light>Controls</SectionLabel>
               <div>
                 <h2 className="max-w-4xl text-[clamp(2.6rem,4.8vw,4.05rem)] font-medium leading-[1.0] tracking-[-0.05em]">
@@ -495,10 +501,10 @@ export default function LandingPage() {
                   system applies them the same way on every request.
                 </p>
               </div>
-            </div>
+            </Reveal>
 
             <div className="mt-14 grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-              <div className="border border-white/25 bg-ink-900 p-5 font-mono text-[11px] leading-relaxed shadow-[0_24px_80px_-30px_rgba(0,0,0,0.6)] sm:p-6" data-reveal>
+              <Reveal className="border border-white/25 bg-ink-900 p-5 font-mono text-[11px] leading-relaxed shadow-[0_24px_80px_-30px_rgba(0,0,0,0.6)] sm:p-6">
                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
                   <span className="text-[9px] uppercase tracking-[0.16em] text-white/35">policy / standard.yaml</span>
                   <span className="text-[9px] text-brand-300">active</span>
@@ -523,19 +529,18 @@ rule "high_risk_vendor"
                   <span>evaluated for every request</span>
                   <span className="text-emerald-300/70">deterministic</span>
                 </div>
-              </div>
+              </Reveal>
 
               <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
                 {CONTROLS.map(([title, copy], index) => (
-                  <div
+                  <Reveal
                     key={title}
-                    data-reveal
-                    style={{ transitionDelay: `${index * 60}ms` }}
+                    delay={index * 0.06}
                     className="border-t border-white/25 pt-4"
                   >
                     <p className="text-[13px] font-medium">{title}</p>
                     <p className="mt-1.5 text-[12px] leading-relaxed text-white/60">{copy}</p>
-                  </div>
+                  </Reveal>
                 ))}
               </div>
             </div>
@@ -545,47 +550,46 @@ rule "high_risk_vendor"
         {/* Teams */}
         <section id="use-cases" className="scroll-mt-16 bg-ink-900 text-white">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="border-t border-white/10 pt-5" data-reveal>
+            <Reveal className="border-t border-white/10 pt-5">
               <SectionLabel light>Use cases</SectionLabel>
-            </div>
-            <div className="mt-8 flex flex-col justify-between gap-6 md:flex-row md:items-end" data-reveal>
+            </Reveal>
+            <Reveal className="mt-8 flex flex-col justify-between gap-6 md:flex-row md:items-end" delay={0.05}>
               <h2 className="max-w-4xl text-[clamp(2.6rem,4.8vw,4.05rem)] font-medium leading-[1.0] tracking-[-0.05em]">
                 Every team. One workflow.
               </h2>
-              <a href="#controls" className="group inline-flex items-center gap-2 text-[12px] font-medium text-white/60">
+              <PressableAnchor href="#controls" className="group inline-flex items-center gap-2 text-[12px] font-medium text-white/60">
                 Explore controls
                 <ArrowUpRight className="h-3.5 w-3.5 transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
-              </a>
-            </div>
+              </PressableAnchor>
+            </Reveal>
 
             <div className="mt-12 border-t border-white/10">
               {TEAMS.map((team, index) => (
-                <a
-                  key={team.name}
-                  href="#workflow"
-                  data-reveal
-                  style={{ transitionDelay: `${Math.min(index, 4) * 55}ms` }}
-                  className="group grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 border-b border-white/10 py-6 transition-colors hover:bg-white/[0.025] md:grid-cols-[1.1fr_1fr_1fr_160px] md:items-center md:gap-6"
-                >
-                  <h3 className="text-[24px] font-medium tracking-[-0.035em] text-white/90 sm:text-[26px]">{team.name}</h3>
-                  <ArrowUpRight className="col-start-2 row-start-1 h-4 w-4 text-white/25 transition group-hover:text-brand-400 md:hidden" />
-                  <div className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-white/40 md:col-span-1">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-1 w-1 bg-brand-500" />
-                      {team.inputs}
-                    </span>
-                  </div>
-                  <div className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-white/40 md:col-span-1">
-                    <span className="inline-flex items-center gap-1.5">
-                      <span className="h-1 w-1 bg-brand-500" />
-                      {team.policy}
-                    </span>
-                  </div>
-                  <div className="col-span-2 flex items-center justify-between gap-4 md:col-span-1">
-                    <span className="text-[11px] text-white/35">{team.outcome}</span>
-                    <ArrowUpRight className="hidden h-4 w-4 shrink-0 text-white/25 transition group-hover:text-brand-400 md:block" />
-                  </div>
-                </a>
+                <Reveal key={team.name} delay={Math.min(index, 4) * 0.055}>
+                  <a
+                    href="#workflow"
+                    className="group grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 border-b border-white/10 py-6 transition-colors hover:bg-white/[0.025] md:grid-cols-[1.1fr_1fr_1fr_160px] md:items-center md:gap-6"
+                  >
+                    <h3 className="text-[24px] font-medium tracking-[-0.035em] text-white/90 sm:text-[26px]">{team.name}</h3>
+                    <ArrowUpRight className="col-start-2 row-start-1 h-4 w-4 text-white/25 transition group-hover:text-brand-400 md:hidden" />
+                    <div className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-white/40 md:col-span-1">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-1 w-1 bg-brand-500" />
+                        {team.inputs}
+                      </span>
+                    </div>
+                    <div className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-white/40 md:col-span-1">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-1 w-1 bg-brand-500" />
+                        {team.policy}
+                      </span>
+                    </div>
+                    <div className="col-span-2 flex items-center justify-between gap-4 md:col-span-1">
+                      <span className="text-[11px] text-white/35">{team.outcome}</span>
+                      <ArrowUpRight className="hidden h-4 w-4 shrink-0 text-white/25 transition group-hover:text-brand-400 md:block" />
+                    </div>
+                  </a>
+                </Reveal>
               ))}
             </div>
           </div>
@@ -594,7 +598,7 @@ rule "high_risk_vendor"
         {/* Security */}
         <section id="security" className="scroll-mt-16 bg-paper text-ink-900">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]" data-reveal>
+            <Reveal className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]">
               <SectionLabel>Security</SectionLabel>
               <div>
                 <h2 className="max-w-4xl text-[clamp(2.6rem,4.8vw,4.05rem)] font-medium leading-[1.0] tracking-[-0.05em]">
@@ -605,14 +609,13 @@ rule "high_risk_vendor"
                   first-class parts of the product — not a reporting layer bolted on afterwards.
                 </p>
               </div>
-            </div>
+            </Reveal>
 
             <div className="mt-14 grid border-l border-t border-ink-900/10 sm:grid-cols-2 lg:grid-cols-3">
               {SECURITY.map(([title, copy], index) => (
-                <div
+                <Reveal
                   key={title}
-                  data-reveal
-                  style={{ transitionDelay: `${(index % 3) * 70}ms` }}
+                  delay={(index % 3) * 0.07}
                   className="border-b border-r border-ink-900/10 p-5 sm:p-6"
                 >
                   <div className="flex items-center gap-2">
@@ -620,11 +623,11 @@ rule "high_risk_vendor"
                     <p className="text-[14px] font-medium">{title}</p>
                   </div>
                   <p className="mt-2 text-[12px] leading-relaxed text-ink-900/50">{copy}</p>
-                </div>
+                </Reveal>
               ))}
             </div>
 
-            <div className="mt-10 grid gap-4 border border-ink-900/10 bg-white p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6" data-reveal>
+            <Reveal className="mt-10 grid gap-4 border border-ink-900/10 bg-white p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
               <div className="flex h-10 w-10 items-center justify-center bg-ink-900">
                 <Fingerprint className="h-5 w-5 text-white" />
               </div>
@@ -637,7 +640,7 @@ rule "high_risk_vendor"
               <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-emerald-700">
                 audit-ready
               </span>
-            </div>
+            </Reveal>
           </div>
         </section>
 
@@ -646,10 +649,10 @@ rule "high_risk_vendor"
           <div className="pointer-events-none absolute inset-0 landing-grid opacity-60" />
           <div className="pointer-events-none absolute bottom-0 left-1/2 h-[420px] w-[760px] -translate-x-1/2 bg-[radial-gradient(closest-side,rgba(47,109,246,0.22),transparent)]" />
           <div className="relative mx-auto max-w-[1320px] px-5 py-24 sm:px-8 sm:py-28">
-            <div className="border-t border-white/10 pt-5" data-reveal>
+            <Reveal className="border-t border-white/10 pt-5">
               <SectionLabel light>Get started</SectionLabel>
-            </div>
-            <div className="mt-10 flex flex-col justify-between gap-10 lg:flex-row lg:items-end" data-reveal>
+            </Reveal>
+            <Reveal className="mt-10 flex flex-col justify-between gap-10 lg:flex-row lg:items-end" delay={0.05}>
               <div>
                 <h2 className="max-w-3xl text-[clamp(3rem,5.6vw,5rem)] font-medium leading-[0.96] tracking-[-0.055em]">
                   Put procurement
@@ -662,23 +665,23 @@ rule "high_risk_vendor"
                 </p>
               </div>
               <div className="flex flex-wrap gap-3">
-                <Link
+                <PressableLink
                   href="/login"
                   className="group inline-flex h-11 items-center gap-3 bg-brand-500 px-5 text-[14px] font-medium text-white transition hover:bg-brand-400"
                 >
                   Open the app
                   <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
-                </Link>
-                <a
+                </PressableLink>
+                <PressableAnchor
                   href="#workflow"
                   className="inline-flex h-11 items-center border border-white/20 px-5 text-[14px] font-medium text-white/75 transition hover:border-white/40 hover:text-white"
                 >
                   Revisit the workflow
-                </a>
+                </PressableAnchor>
               </div>
-            </div>
+            </Reveal>
 
-            <div className="mt-16 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-3" data-reveal>
+            <Reveal className="mt-16 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-3" delay={0.08}>
               {[
                 [Timer, "Approvals with SLAs", "Timers and escalation are part of the workflow."],
                 [ReceiptText, "POs with references", "Every PO gets a number and an ERP handoff."],
@@ -695,7 +698,7 @@ rule "high_risk_vendor"
                   </div>
                 );
               })}
-            </div>
+            </Reveal>
           </div>
         </section>
       </main>

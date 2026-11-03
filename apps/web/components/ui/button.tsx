@@ -1,4 +1,7 @@
+"use client";
+
 import * as React from "react";
+import { motion, type HTMLMotionProps } from "framer-motion";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
@@ -33,11 +36,22 @@ export interface ButtonProps
   extends React.ButtonHTMLAttributes<HTMLButtonElement>,
     VariantProps<typeof buttonVariants> {}
 
+type MotionButtonProps = ButtonProps &
+  Pick<HTMLMotionProps<"button">, "whileHover" | "whileTap" | "transition">;
+
+const MotionButton = motion.button as unknown as React.ForwardRefExoticComponent<
+  MotionButtonProps & React.RefAttributes<HTMLButtonElement>
+>;
+
 const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, type = "button", ...props }, ref) => (
-    <button
+  ({ className, variant, size, type = "button", disabled, ...props }, ref) => (
+    <MotionButton
       ref={ref}
       type={type}
+      disabled={disabled}
+      whileHover={disabled ? undefined : { scale: 1.01 }}
+      whileTap={disabled ? undefined : { scale: 0.985 }}
+      transition={{ type: "spring", stiffness: 500, damping: 34 }}
       className={cn(buttonVariants({ variant, size }), className)}
       {...props}
     />

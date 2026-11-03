@@ -21,6 +21,7 @@ approval, and every action is attributed in an audit trail.
 - Durable workflows with signals, queries, timers, SLA escalation and retries.
 - Config-only switching between local, stock and managed workflow endpoints.
 - Real adapter boundaries for email, Slack, ERP, storage and AI risk summaries.
+- Framer Motion for entrance and interaction choreography, with Lucide icons.
 - Runnable on Render + Neon with an external workflow engine endpoint.
 
 ## What ProcureFlow is for

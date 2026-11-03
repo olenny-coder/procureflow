@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
+import { motion } from "framer-motion";
 import { signOut } from "next-auth/react";
 import {
   Building2,
@@ -65,7 +66,13 @@ export function AppShell({
     <div className="min-h-screen">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/10 bg-ink-900 lg:flex">
         <div className="flex h-16 items-center border-b border-white/10 px-5">
-          <Logo tone="dark" markClassName="h-9 w-9" />
+          <Link
+            href="/"
+            aria-label="ProcureFlow home"
+            className="inline-flex w-fit transition-opacity hover:opacity-80"
+          >
+            <Logo tone="dark" markClassName="h-9 w-9" />
+          </Link>
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
@@ -80,15 +87,20 @@ export function AppShell({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "group flex items-center gap-3 rounded px-3 py-2.5 text-sm font-medium transition",
-                  active
-                    ? "bg-white/[0.07] text-white"
-                    : "text-white/55 hover:bg-white/[0.04] hover:text-white",
+                  "group relative flex items-center gap-3 rounded px-3 py-2.5 text-sm font-medium transition",
+                  active ? "text-white" : "text-white/55 hover:bg-white/[0.04] hover:text-white",
                 )}
               >
-                <Icon className={cn("h-[18px] w-[18px]", active ? "text-brand-400" : "text-white/30")} />
-                <span className="flex-1">{item.label}</span>
-                {active ? <ChevronRight className="h-4 w-4 text-brand-400" /> : null}
+                {active ? (
+                  <motion.span
+                    layoutId="active-sidebar-nav"
+                    className="absolute inset-0 rounded bg-white/[0.07]"
+                    transition={{ type: "spring", stiffness: 400, damping: 34 }}
+                  />
+                ) : null}
+                <Icon className={cn("relative h-[18px] w-[18px]", active ? "text-brand-400" : "text-white/30")} />
+                <span className="relative flex-1">{item.label}</span>
+                {active ? <ChevronRight className="relative h-4 w-4 text-brand-400" /> : null}
               </Link>
             );
           })}
@@ -130,7 +142,9 @@ export function AppShell({
         <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/85 backdrop-blur">
           <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-2 lg:hidden">
-              <Logo tone="light" markClassName="h-8 w-8" />
+              <Link href="/" aria-label="ProcureFlow home" className="inline-flex">
+                <Logo tone="light" markClassName="h-8 w-8" />
+              </Link>
             </div>
             <div className="hidden items-center gap-2 text-xs font-medium text-slate-500 lg:flex">
               <Sparkles className="h-3.5 w-3.5 text-brand-500" />
