@@ -551,6 +551,11 @@ the Postgres service, so Coolify had no non-database service to attach a domain 
    Do not assign domains to `postgres`, `engine`, or `worker`.
 6. Set `APP_URL` to the assigned domain and redeploy if it was not known up front.
 
+Secrets are **runtime variables**; they do not need to be marked as build variables
+in Coolify. Compose builds without them and the web container validates them at
+startup, so a missing secret produces a clear runtime error instead of a failed
+Docker build.
+
 Local production-mode test:
 
 ```bash

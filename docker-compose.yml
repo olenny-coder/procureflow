@@ -1,3 +1,22 @@
+x-shared-environment: &shared-environment
+  NODE_ENV: production
+  DATABASE_URL: postgresql://${POSTGRES_USER:-procureflow}:${POSTGRES_PASSWORD:-procureflow}@postgres:5432/${POSTGRES_DB:-procureflow}
+  DIRECT_URL: postgresql://${POSTGRES_USER:-procureflow}:${POSTGRES_PASSWORD:-procureflow}@postgres:5432/${POSTGRES_DB:-procureflow}
+  DATABASE_SSL: "false"
+  DATABASE_POOLED: "false"
+  WORKFLOW_ENGINE_ADDRESS: engine:7233
+  WORKFLOW_ENGINE_NAMESPACE: default
+  WORKFLOW_ENGINE_TASK_QUEUE: procureflow
+  WORKFLOW_ENGINE_TLS: "false"
+  WORKFLOW_ENGINE_SEARCH_ATTRIBUTES: "false"
+  EMAIL_ADAPTER: console
+  EMAIL_FROM: ${EMAIL_FROM:-procureflow@example.com}
+  ERP_ADAPTER: csv
+  ERP_CSV_DIR: .data/erp
+  STORAGE_ADAPTER: local
+  STORAGE_DIR: .data/storage
+  AI_RISK_SUMMARY_ENABLED: "true"
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -40,31 +59,16 @@ services:
         condition: service_healthy
       engine:
         condition: service_started
-    environment: &app-environment
-      NODE_ENV: production
+    environment:
+      <<: *shared-environment
       PORT: "3000"
-      DATABASE_URL: postgresql://${POSTGRES_USER:-procureflow}:${POSTGRES_PASSWORD:-procureflow}@postgres:5432/${POSTGRES_DB:-procureflow}
-      DIRECT_URL: postgresql://${POSTGRES_USER:-procureflow}:${POSTGRES_PASSWORD:-procureflow}@postgres:5432/${POSTGRES_DB:-procureflow}
-      DATABASE_SSL: "false"
-      DATABASE_POOLED: "false"
-      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET}
+      # Empty during `docker compose build`; the container checks these at startup.
+      AUTH_SECRET: ${AUTH_SECRET:-}
       AUTH_URL: ${APP_URL:-http://localhost:3000}
       NEXTAUTH_URL: ${APP_URL:-http://localhost:3000}
       AUTH_TRUST_HOST: "true"
-      WORKFLOW_ENGINE_ADDRESS: engine:7233
-      WORKFLOW_ENGINE_NAMESPACE: default
-      WORKFLOW_ENGINE_TASK_QUEUE: procureflow
-      WORKFLOW_ENGINE_TLS: "false"
-      WORKFLOW_ENGINE_SEARCH_ATTRIBUTES: "false"
-      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:-}
       SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
-      EMAIL_ADAPTER: console
-      EMAIL_FROM: ${EMAIL_FROM:-procureflow@example.com}
-      ERP_ADAPTER: csv
-      ERP_CSV_DIR: .data/erp
-      STORAGE_ADAPTER: local
-      STORAGE_DIR: .data/storage
-      AI_RISK_SUMMARY_ENABLED: "true"
     volumes:
       - procureflow_runtime:/app/.data
     healthcheck:
@@ -92,9 +96,7 @@ services:
       engine:
         condition: service_started
     environment:
-      <<: *app-environment
-      PORT: "3001"
-      SEED_DEMO_DATA: "false"
+      <<: *shared-environment
     volumes:
       - procureflow_runtime:/app/.data
 
