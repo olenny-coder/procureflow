@@ -20,20 +20,20 @@ body:
     validations:
       required: true
   - type: dropdown
-    id: temporal
+    id: engine
     attributes:
-      label: Temporal runtime
+      label: Workflow engine runtime
       options:
-        - Stock Temporal CLI (pnpm dev:stock-temporal)
-        - Reworked Temporal (pnpm dev)
-        - Temporal Cloud / external
+        - Stock engine (pnpm dev:stock-engine)
+        - Reworked engine (pnpm dev)
+        - Managed / external endpoint
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
       label: Relevant logs
-      description: Include request IDs, Temporal workflow IDs and `/api/health` output. Do not paste secrets.
+      description: Include request IDs, workflow IDs and `/api/health` output. Do not paste secrets.
       render: shell
   - type: input
     id: version

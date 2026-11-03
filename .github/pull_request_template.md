@@ -8,14 +8,14 @@
 - [ ] `pnpm lint`
 - [ ] `pnpm test`
 - [ ] `pnpm build`
-- [ ] `pnpm temporal:check`
-- [ ] Ran `pnpm smoke` against stock Temporal (if workflow/API changed)
-- [ ] Ran `pnpm smoke` against reworked Temporal (if rework/search attributes changed)
+- [ ] `pnpm engine:check`
+- [ ] Ran `pnpm smoke` against the stock engine (if workflow/API changed)
+- [ ] Ran `pnpm smoke` against the reworked engine (if engine/search attributes changed)
 
-## Temporal changes
+## Engine changes
 
 - [ ] No changes under `third_party/temporal/`
-- [ ] Changes under `third_party/temporal/` are documented in `TEMPORAL_MODIFICATIONS.md`
+- [ ] Changes under `third_party/temporal/` are documented in `VENDOR_MODIFICATIONS.md`
 
 ## Notes for reviewers
 

@@ -17,6 +17,7 @@ import {
 import type { Role } from "@procureflow/shared";
 import { cn, ROLE_STYLES } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Logo } from "@/components/brand/logo";
 
 interface NavItem {
   href: string;
@@ -26,7 +27,7 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/requests/new", label: "New request", icon: FilePlus2 },
   { href: "/approvals", label: "Approvals", icon: CheckSquare, roles: ["APPROVER", "FINANCE", "ADMIN"] },
   { href: "/vendors", label: "Vendors", icon: Building2 },
@@ -35,7 +36,6 @@ const NAV: NavItem[] = [
 ];
 
 function isActive(pathname: string, href: string): boolean {
-  if (href === "/") return pathname === "/";
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
@@ -63,21 +63,13 @@ export function AppShell({
 
   return (
     <div className="min-h-screen">
-      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-slate-200/80 bg-white/90 backdrop-blur lg:flex">
-        <div className="flex h-16 items-center gap-3 border-b border-slate-100 px-5">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-sm font-bold text-white shadow-sm">
-            PF
-          </div>
-          <div>
-            <p className="text-sm font-semibold tracking-tight text-slate-900">ProcureFlow</p>
-            <p className="text-[11px] font-medium uppercase tracking-wider text-slate-400">
-              Procurement OS
-            </p>
-          </div>
+      <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-white/10 bg-ink-900 lg:flex">
+        <div className="flex h-16 items-center border-b border-white/10 px-5">
+          <Logo tone="dark" markClassName="h-9 w-9" />
         </div>
 
         <nav className="flex-1 space-y-1 p-3">
-          <p className="px-3 pb-2 pt-3 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <p className="px-3 pb-2 pt-3 font-mono text-[9px] font-medium uppercase tracking-[0.16em] text-white/30">
             Workspace
           </p>
           {items.map((item) => {
@@ -88,13 +80,13 @@ export function AppShell({
                 key={item.href}
                 href={item.href}
                 className={cn(
-                  "group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition",
+                  "group flex items-center gap-3 rounded px-3 py-2.5 text-sm font-medium transition",
                   active
-                    ? "bg-brand-50 text-brand-700"
-                    : "text-slate-600 hover:bg-slate-100 hover:text-slate-900",
+                    ? "bg-white/[0.07] text-white"
+                    : "text-white/55 hover:bg-white/[0.04] hover:text-white",
                 )}
               >
-                <Icon className={cn("h-[18px] w-[18px]", active ? "text-brand-600" : "text-slate-400")} />
+                <Icon className={cn("h-[18px] w-[18px]", active ? "text-brand-400" : "text-white/30")} />
                 <span className="flex-1">{item.label}</span>
                 {active ? <ChevronRight className="h-4 w-4 text-brand-400" /> : null}
               </Link>
@@ -102,14 +94,14 @@ export function AppShell({
           })}
         </nav>
 
-        <div className="m-3 rounded-2xl border border-slate-200 bg-slate-50/80 p-3">
+        <div className="m-3 rounded border border-white/10 bg-white/[0.04] p-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-semibold text-white ring-1 ring-white/15">
               {initials}
             </div>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-slate-900">{user.name}</p>
-              <p className="truncate text-xs text-slate-500">{user.email}</p>
+              <p className="truncate text-sm font-semibold text-white">{user.name}</p>
+              <p className="truncate text-xs text-white/40">{user.email}</p>
             </div>
           </div>
           <div className="mt-3 flex items-center justify-between gap-2">
@@ -121,7 +113,12 @@ export function AppShell({
             >
               {user.role}
             </span>
-            <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={handleSignOut}>
+            <Button
+              variant="ghost"
+              size="sm"
+              className="h-7 px-2 text-xs text-white/50 hover:bg-white/10 hover:text-white"
+              onClick={handleSignOut}
+            >
               <LogOut className="h-3.5 w-3.5" />
               Sign out
             </Button>
@@ -133,10 +130,7 @@ export function AppShell({
         <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-white/85 backdrop-blur">
           <div className="flex h-16 items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
             <div className="flex items-center gap-2 lg:hidden">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white">
-                PF
-              </div>
-              <span className="text-sm font-semibold">ProcureFlow</span>
+              <Logo tone="light" markClassName="h-8 w-8" />
             </div>
             <div className="hidden items-center gap-2 text-xs font-medium text-slate-500 lg:flex">
               <Sparkles className="h-3.5 w-3.5 text-brand-500" />

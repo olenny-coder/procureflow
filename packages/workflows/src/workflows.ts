@@ -8,7 +8,7 @@ import {
   upsertSearchAttributes,
   workflowInfo,
 } from "@temporalio/workflow";
-import { PROCUREFLOW_SEARCH_ATTRIBUTES } from "@procureflow/shared/temporal";
+import { PROCUREFLOW_SEARCH_ATTRIBUTES } from "@procureflow/shared/workflow";
 import type {
   DecisionSignalInput,
   PurchaseRequestWorkflowInput,
@@ -18,7 +18,7 @@ import type {
   VendorOnboardingWorkflowInput,
   VendorOnboardingWorkflowState,
   WorkflowApprovalStep,
-} from "@procureflow/shared/temporal";
+} from "@procureflow/shared/workflow";
 import type { Role } from "@procureflow/shared/domain";
 import type {
   OutboxActivities,
@@ -235,7 +235,7 @@ export async function purchaseRequestWorkflow(
   state.status = snapshot.status;
   state.revision = snapshot.revision;
   record(`Submitted request "${snapshot.title}" for ${snapshot.vendorName}`);
-  setSearchAttributes(input.reworkSearchAttributes, {
+  setSearchAttributes(input.searchAttributesEnabled, {
     department: snapshot.department,
     risk: snapshot.vendorRiskLevel,
     status: state.status,
@@ -277,7 +277,7 @@ export async function purchaseRequestWorkflow(
       state.status = "APPROVED";
       state.pendingTask = null;
       record("Auto-approved by policy");
-      return await issueAndComplete(input, info.workflowId, snapshot, lastActorId, state, record, input.reworkSearchAttributes);
+      return await issueAndComplete(input, info.workflowId, snapshot, lastActorId, state, record, input.searchAttributesEnabled);
     }
 
     const plan = await core.createApprovalPlan({
@@ -300,7 +300,7 @@ export async function purchaseRequestWorkflow(
       dueAt: firstTask.dueAt,
     };
     record(`Approval chain created: ${plan.tasks.map((task) => task.role).join(" -> ")}`);
-    setSearchAttributes(input.reworkSearchAttributes, {
+    setSearchAttributes(input.searchAttributesEnabled, {
       department: snapshot.department,
       risk: snapshot.vendorRiskLevel,
       status: state.status,
@@ -418,7 +418,7 @@ export async function purchaseRequestWorkflow(
       state.chain = state.chain.map((step) =>
         step.taskId === currentTask.taskId ? { ...step, status: result.taskStatus } : step,
       );
-      setSearchAttributes(input.reworkSearchAttributes, {
+      setSearchAttributes(input.searchAttributesEnabled, {
         department: snapshot.department,
         risk: snapshot.vendorRiskLevel,
         status: state.status,
@@ -473,7 +473,7 @@ export async function purchaseRequestWorkflow(
         lastActorId,
         state,
         record,
-        input.reworkSearchAttributes,
+        input.searchAttributesEnabled,
       );
     }
 
@@ -541,7 +541,7 @@ export async function purchaseRequestWorkflow(
     state.pendingTask = null;
     state.autoApprove = false;
     record(`Resubmitted as revision ${resubmitted.revision}`);
-    setSearchAttributes(input.reworkSearchAttributes, {
+    setSearchAttributes(input.searchAttributesEnabled, {
       department: snapshot.department,
       risk: snapshot.vendorRiskLevel,
       status: state.status,
@@ -556,7 +556,7 @@ async function issueAndComplete(
   actorId: string,
   state: PurchaseRequestWorkflowState,
   record: (summary: string) => void,
-  reworkSearchAttributes: boolean,
+  searchAttributesEnabled: boolean,
 ): Promise<PurchaseRequestWorkflowResult> {
   const po = await core.issuePurchaseOrder({
     requestId: input.requestId,
@@ -565,7 +565,7 @@ async function issueAndComplete(
   });
   state.status = "PO_ISSUED";
   state.pendingTask = null;
-  setSearchAttributes(reworkSearchAttributes, {
+  setSearchAttributes(searchAttributesEnabled, {
     department: snapshot.department,
     risk: snapshot.vendorRiskLevel,
     status: state.status,

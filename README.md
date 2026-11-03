@@ -18,6 +18,8 @@ approval, and every action is attributed in an audit trail.
 
 ## Product tour
 
+![ProcureFlow landing page: every purchase, one clear path](docs/screenshots/landing.png)
+
 | Login | Dashboard |
 | --- | --- |
 | ![Login](docs/screenshots/login.png) | ![Dashboard](docs/screenshots/dashboard.png) |
@@ -36,17 +38,17 @@ flowchart LR
 
   subgraph Web["apps/web (Next.js)"]
     API["Route handlers + server components<br/>Zod validation · RBAC · rate limits"]
-    TC["Temporal client<br/>@temporalio/client"]
+    TC["engine client"]
     DBREAD["Read models<br/>Drizzle"]
   end
 
-  subgraph Temporal["Temporal"]
+  subgraph Engine["Workflow engine"]
     WF["purchaseRequestWorkflow<br/>vendorOnboardingWorkflow"]
     TQ["Task queue: procureflow"]
   end
 
   subgraph Worker["apps/worker"]
-    W["Temporal Worker<br/>interceptors + integrations plugin"]
+    W["Engine worker<br/>interceptors + integrations plugin"]
     ACT["Activities<br/>all side effects"]
   end
 
@@ -86,7 +88,7 @@ sequenceDiagram
   actor Finance
   participant Web as Next.js API
   participant DB as PostgreSQL
-  participant T as Temporal
+  participant T as workflow engine
   participant W as Worker
   participant PO as ERP adapter
 
@@ -110,7 +112,7 @@ sequenceDiagram
 ```
 
 The API **never mutates approval state directly**: submit starts a workflow and
-approval actions only send Temporal signals. The worker's activities are the only
+approval actions only send workflow engine signals. The worker's activities are the only
 writers of approval/PO state and audit events.
 
 ---
@@ -120,19 +122,19 @@ writers of approval/PO state and audit events.
 ```text
 apps/
   web/                    Next.js App Router UI, API routes, Auth.js
-  worker/                 Temporal Worker process
+  worker/                 Engine worker process
 packages/
   shared/                 Zod schemas, domain types, deterministic policy engine
   db/                     Drizzle schema, migrations, seed, client
   workflows/              Workflows, activities, interceptors, activity contracts
   integrations/           Adapter interfaces + implementations + Worker Plugin
-third_party/temporal/     Vendored Temporal server source (upstream + small rework)
-scripts/                  Temporal build/run, dev orchestration, smoke, CI guard
-.github/workflows/ci.yml  Quality, stock-Temporal E2E, rework compile
+third_party/temporal/     Vendored engine source (upstream + small rework)
+scripts/                  Engine build/run, dev orchestration, smoke, CI guard
+.github/workflows/ci.yml  Quality, stock-engine E2E, engine compile
 docker-compose.yml        Local Postgres
 render.yaml               Render web + worker blueprint
-TEMPORAL_BASE.md          Pinned upstream provenance
-TEMPORAL_MODIFICATIONS.md Every local Temporal change
+VENDOR_BASE.md            Pinned upstream provenance
+VENDOR_MODIFICATIONS.md   Every local engine change
 ```
 
 ---
@@ -143,11 +145,11 @@ TEMPORAL_MODIFICATIONS.md Every local Temporal change
 
 | Tool | Version | Notes |
 | --- | --- | --- |
-| Node.js | 20+ (tested on 24) | Next.js 14, Temporal SDK |
+| Node.js | 20+ (tested on 24) | Next.js 14, workflow SDK |
 | pnpm | 10+ | `corepack enable` |
 | Docker | optional if Postgres is already running | `docker compose up -d postgres` |
-| Go | 1.27+ | Only for the reworked Temporal build |
-| Temporal CLI | auto-downloaded | Used by `pnpm dev:stock-temporal` |
+| Go | 1.27+ | Only for the reworked engine build |
+| engine CLI | auto-downloaded | Used by `pnpm dev:stock-engine` |
 
 ### 1. Environment
 
@@ -179,37 +181,37 @@ pnpm dev
 `pnpm dev` starts, in order:
 
 1. Postgres if it is not already listening on `DATABASE_URL` (via docker compose),
-2. the **reworked Temporal** from `third_party/temporal` (builds it if missing),
+2. the **reworked engine** from `third_party/temporal` (builds it if missing),
 3. database migrations + idempotent seed,
-4. the Temporal worker,
+4. the workflow engine worker,
 5. the Next.js web app at <http://localhost:3000>.
 
 The reworked server persists workflow state in
-`third_party/temporal/.build/temporal.db` and auto-provisions the `default`
+`third_party/temporal/.build/engine.db` and auto-provisions the `default`
 namespace plus ProcureFlow search attributes.
 
-> The reworked Temporal does not ship a web UI. Set `TEMPORAL_UI_URL` to a Temporal
-> UI instance if you want the “Open in Temporal UI” links to work. The stock CLI
-> (`pnpm dev:stock-temporal`) serves its UI on <http://localhost:8233>.
+> The reworked engine does not include an inspector UI. The stock engine
+> (`pnpm dev:stock-engine`) serves its UI on <http://localhost:8233>;
+> `WORKFLOW_ENGINE_UI_URL` is available for operators who expose one separately.
 
-### Stock Temporal alternative
+### Stock engine alternative
 
 ```bash
-pnpm dev:stock-temporal
+pnpm dev:stock-engine
 ```
 
-This downloads the pinned Temporal CLI (`v1.9.1`), starts its dev server with the
+This downloads the pinned engine CLI (`v1.9.1`), starts its dev server with the
 ProcureFlow search attributes, then runs migrations/seed, worker and web. It is the
 flow used by CI and does not require Go.
 
 You can also run pieces separately:
 
 ```bash
-pnpm temporal:dev:stock      # stock Temporal only
-pnpm temporal:build          # build reworked server + bootstrap (Go 1.27+)
-pnpm temporal:dev            # reworked Temporal only
-pnpm dev                     # full reworked stack
-pnpm smoke                   # E2E against a running stack
+pnpm engine:dev:stock       # stock engine only
+pnpm engine:build           # build reworked engine + bootstrap (Go 1.27+)
+pnpm engine:dev             # reworked engine only
+pnpm dev                    # full reworked stack
+pnpm smoke                  # E2E against a running stack
 ```
 
 ---
@@ -234,7 +236,7 @@ production).
 4. Sign in as **approver** → **Approvals** → approve with a comment.
 5. Sign in as **finance** → **Approvals** → approve.
 6. Open the request: PO is issued and synced, vendor risk summary and full audit
-   trail are visible. The Temporal workflow card shows a live `getState` query.
+   trail are visible. The workflow engine workflow card shows a live `getState` query.
 7. Optional: submit a $12,000 request (adds admin/compliance), or use the pending
    *Apex Consulting Group* high-risk vendor (adds a compliance step).
 8. Optional: sign in as **admin** → **Policies** to change amounts/approvers and see
@@ -289,7 +291,7 @@ evaluations; in-flight workflows keep the chain they were created with.
 
 ---
 
-## Temporal implementation
+## Workflow engine implementation
 
 ### Workflow IDs
 
@@ -353,52 +355,52 @@ The request stores its `workflowId`, so the API always signals/queries the right
 
 ---
 
-## Temporal rework (local runtime)
+## Engine rework (local runtime)
 
-The Temporal **server** source is vendored at `third_party/temporal/` (upstream
+The engine **server** source is vendored at `third_party/temporal/` (upstream
 `main` @ `96a50b1`, 2026-11-02). Exact provenance and the local tag are in
-[`TEMPORAL_BASE.md`](./TEMPORAL_BASE.md); every local change is in
-[`TEMPORAL_MODIFICATIONS.md`](./TEMPORAL_MODIFICATIONS.md).
+[`VENDOR_BASE.md`](./VENDOR_BASE.md); every local change is in
+[`VENDOR_MODIFICATIONS.md`](./VENDOR_MODIFICATIONS.md).
 
 The upstream server code is **unmodified**. The rework consists of:
 
 1. `cmd/tools/procureflow-bootstrap/main.go` — uses the public Go SDK operator API
    to wait for the server, create the namespace and idempotently register the three
    `ProcureFlow*` Keyword search attributes.
-2. `config/procureflow-dev.yaml` — durable SQLite dev topology (`.build/temporal.db`)
+2. `config/procureflow-dev.yaml` — durable SQLite dev topology (`.build/engine.db`)
    so approval workflows survive worker/server restarts.
 
 Why not patch server internals? The required behavior is achievable with SDK APIs,
 interceptors, a Worker Plugin and operator APIs; keeping server code pristine means
-the same app works on Temporal Cloud and stock releases. See the rationale and the
-preferred-extension-point checklist in `TEMPORAL_MODIFICATIONS.md`.
+the same app works on managed and stock engines. See the rationale and the
+preferred-extension-point checklist in `VENDOR_MODIFICATIONS.md`.
 
 Build and run:
 
 ```bash
-pnpm temporal:build   # requires Go 1.27+
-pnpm temporal:dev     # SQLite durable server + bootstrap
+pnpm engine:build   # requires Go 1.27+
+pnpm engine:dev     # SQLite durable server + bootstrap
 ```
 
-Search attribute behavior is gated by `TEMPORAL_REWORK_ENABLED`:
+Search attribute behavior is gated by `WORKFLOW_ENGINE_SEARCH_ATTRIBUTES`:
 
 - `true` → workflows upsert `ProcureFlowDepartment`, `ProcureFlowRisk`,
   `ProcureFlowStatus`; the reworked bootstrap ensures they exist. Verified via
-  `temporal workflow describe` and a visibility query.
-- `false` (default for stock/Cloud) → the app skips those upserts and uses the
+  the engine inspector and a visibility query.
+- `false` (default for the stock engine or a managed service) → the app skips those upserts and uses the
   PostgreSQL read model for everything. No code changes.
 
-CI runs all functional tests against **stock Temporal CLI**, plus a compile-only job
+CI runs all functional tests against **stock engine CLI**, plus a compile-only job
 for the reworked server, so the rework is never load-bearing for basic functionality.
 
 ### Managed deployment split
 
-| Environment | Temporal | Notes |
+| Environment | Engine | Notes |
 | --- | --- | --- |
-| Local dev | Reworked server (`pnpm dev`) | Durable SQLite, bootstrap, custom search attributes |
-| Local fallback / CI | Stock Temporal CLI (`pnpm dev:stock-temporal`) | No Go required; proves portability |
-| Self-hosted | Any stock Temporal cluster | Point `TEMPORAL_ADDRESS`; keep rework flag false |
-| Render + Neon | Temporal Cloud or external Temporal | Reworked server is **not** deployed to Render |
+| Local dev | Reworked engine (`pnpm dev`) | Durable SQLite, bootstrap, custom search attributes |
+| Local fallback / CI | Stock engine (`pnpm dev:stock-engine`) | No Go required; proves portability |
+| Self-hosted | Any stock engine cluster | Point `WORKFLOW_ENGINE_ADDRESS`; keep rework flag false |
+| Render + Neon | managed service or external engine | Reworked server is **not** deployed to Render |
 
 ---
 
@@ -411,7 +413,7 @@ limited per process.
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `*` | `/api/auth/[...nextauth]` | Auth.js credentials login/session |
-| `GET` | `/api/health` | DB + Temporal readiness (200/503) |
+| `GET` | `/api/health` | DB + workflow engine readiness (200/503) |
 | `GET/POST` | `/api/requests` | List my/all requests; create draft |
 | `GET/PATCH` | `/api/requests/:id` | Detail + live workflow state; edit draft/changes |
 | `POST` | `/api/requests/:id/submit` | Start/resume `purchaseRequestWorkflow` |
@@ -427,8 +429,9 @@ limited per process.
 | `GET` | `/api/audit` | Filter/paginate audit log (admin/finance) |
 | `POST` | `/api/internal/outbox` | Retry outbox notifications (Bearer `INTERNAL_API_TOKEN` or admin) |
 
-Pages: `/login`, `/` dashboard, `/requests/new` wizard, `/requests/:id` timeline,
-`/approvals` inbox, `/vendors` directory, `/policies` admin, `/audit` log.
+Pages: `/` marketing landing, `/login`, `/dashboard`, `/requests/new` wizard,
+`/requests/:id` timeline, `/approvals` inbox, `/vendors` directory, `/policies`
+admin, `/audit` log.
 
 ---
 
@@ -455,25 +458,25 @@ error, so failures are visible and retryable. `POST /api/internal/outbox` starts
 
 ```bash
 pnpm test:unit       # policy engine + Zod schemas (22 tests)
-pnpm test:workflows  # Temporal workflow integration tests (5 scenarios)
+pnpm test:workflows  # workflow engine workflow integration tests (5 scenarios)
 pnpm typecheck
 pnpm lint
 pnpm build
-pnpm temporal:check  # Temporal modification log freshness
-pnpm smoke           # full HTTP + Temporal + DB E2E against a running stack
+pnpm engine:check  # workflow engine modification log freshness
+pnpm smoke           # full HTTP + workflow engine + DB E2E against a running stack
 ```
 
-Workflow tests use `@temporalio/testing` and cover: manager+finance approval → PO,
+Workflow tests use the durable workflow test harness and cover: manager+finance approval → PO,
 rejection, changes requested + resubmission, SLA escalation to admin, and
-auto-approval. They download/cache a Temporal test server on first run.
+auto-approval. They download/cache a workflow engine test server on first run.
 
 CI (`.github/workflows/ci.yml`):
 
-1. **quality** — install, Temporal diff guard, lint, typecheck, unit tests, production
+1. **quality** — install, workflow engine diff guard, lint, typecheck, unit tests, production
    build.
-2. **stock-temporal** — Postgres service, stock Temporal CLI dev server, workflow
+2. **stock-engine** — Postgres service, stock engine CLI dev server, workflow
    tests, worker + web, full smoke test.
-3. **temporal-rework-build** — compiles the reworked server and bootstrap with Go.
+3. **engine-build** — compiles the reworked server and bootstrap with Go.
 
 ---
 
@@ -493,8 +496,8 @@ CI (`.github/workflows/ci.yml`):
 
 1. Push the repo to GitHub.
 2. Render → **New → Blueprint** → select the repo (`render.yaml`).
-3. Fill the `sync: false` env vars: Neon URLs, `TEMPORAL_ADDRESS`,
-   `TEMPORAL_NAMESPACE`, `TEMPORAL_API_KEY` (Temporal Cloud), `TEMPORAL_UI_URL`,
+3. Fill the `sync: false` env vars: Neon URLs, `WORKFLOW_ENGINE_ADDRESS`,
+   `WORKFLOW_ENGINE_NAMESPACE`, `WORKFLOW_ENGINE_API_KEY` (managed engine), `WORKFLOW_ENGINE_UI_URL`,
    `AUTH_URL` (your Render web URL), optional Resend/Slack keys.
 4. Deploy. The web service runs `pnpm db:migrate` as a pre-deploy command and
    exposes `/api/health`; the worker runs
@@ -505,13 +508,13 @@ CI (`.github/workflows/ci.yml`):
 
 `RENDER_EXTERNAL_URL` is used automatically for Auth.js when `AUTH_URL` is unset.
 
-**Temporal Cloud:** create a namespace, copy the gRPC endpoint into
-`TEMPORAL_ADDRESS`, set `TEMPORAL_NAMESPACE`, `TEMPORAL_TLS=true`,
-`TEMPORAL_API_KEY`, and keep `TEMPORAL_REWORK_ENABLED=false`. The app uses official
+**managed engine:** create a namespace, copy the gRPC endpoint into
+`WORKFLOW_ENGINE_ADDRESS`, set `WORKFLOW_ENGINE_NAMESPACE`, `WORKFLOW_ENGINE_TLS=true`,
+`WORKFLOW_ENGINE_API_KEY`, and keep `WORKFLOW_ENGINE_SEARCH_ATTRIBUTES=false`. The app uses official
 SDK packages only and requires no code changes.
 
-**Do not attempt to run the reworked Temporal server on Render in this MVP.** It is
-a local/self-hosted development artifact; use Temporal Cloud or an external
+**Do not attempt to run the reworked engine server on Render in this MVP.** It is
+a local/self-hosted development artifact; use managed engine or an external
 self-hosted endpoint for managed deployment.
 
 ---
@@ -527,12 +530,12 @@ See [`.env.example`](./.env.example) for the complete annotated list. Core value
 | `DATABASE_SSL`, `DATABASE_POOLED` | SSL and PgBouncer-compatible prepared statements |
 | `AUTH_SECRET` | Auth.js signing secret (32+ random bytes) |
 | `AUTH_URL` / `NEXTAUTH_URL` | Public app URL for callbacks and email links |
-| `TEMPORAL_ADDRESS` | gRPC endpoint (reworked local, stock, Cloud) |
-| `TEMPORAL_NAMESPACE` | Namespace |
-| `TEMPORAL_TASK_QUEUE` | Default `procureflow` |
-| `TEMPORAL_TLS`, `TEMPORAL_API_KEY` | Temporal Cloud / mTLS endpoints |
-| `TEMPORAL_REWORK_ENABLED` | Enable ProcureFlow search attributes (rework only) |
-| `TEMPORAL_UI_URL` | Deep-link base for the workflow card |
+| `WORKFLOW_ENGINE_ADDRESS` | gRPC endpoint (local, stock, managed) |
+| `WORKFLOW_ENGINE_NAMESPACE` | Namespace |
+| `WORKFLOW_ENGINE_TASK_QUEUE` | Default `procureflow` |
+| `WORKFLOW_ENGINE_TLS`, `WORKFLOW_ENGINE_API_KEY` | managed service / mTLS endpoints |
+| `WORKFLOW_ENGINE_SEARCH_ATTRIBUTES` | Enable ProcureFlow search attributes (rework only) |
+| `WORKFLOW_ENGINE_UI_URL` | Optional engine inspector URL for operators |
 | `PROCUREFLOW_AUDIT_INTERCEPTOR_ENABLED` | Enable custom interceptors |
 | `PROCUREFLOW_WORKER_PLUGIN_ENABLED` | Enable adapter Worker Plugin |
 | `EMAIL_*`, `SLACK_WEBHOOK_URL`, `ERP_*`, `STORAGE_*`, `AI_RISK_SUMMARY_ENABLED` | Integration configuration |
@@ -555,7 +558,7 @@ Never commit `.env` or real secrets. `.env.example` contains local-only placehol
 - **Vendor status matters:** a request may target a DRAFT/PENDING vendor (it adds a
   compliance step), but a BLOCKED vendor is rejected at submission.
 - **Approval SLAs:** one escalation to ADMIN with a fresh 24h deadline; a second
-  expiry rejects the request. Timers are Temporal timers.
+  expiry rejects the request. Timers are workflow engine timers.
 - **Changes requested:** the workflow waits 30 days for a resubmission signal. If it
   completes, a later resubmission starts a revision-suffixed deterministic workflow.
 - **Notifications are best-effort at the workflow boundary:** failures are recorded
@@ -566,7 +569,7 @@ Never commit `.env` or real secrets. `.env.example` contains local-only placehol
   production clusters.
 - **Auth.js v4 credentials + JWT sessions** are used for simplicity; session
   revocation is by JWT expiry (8h) rather than server-side session tables.
-- **Search attributes are optional** and only used when the reworked Temporal flag is
+- **Search attributes are optional** and only used when the reworked engine flag is
   on. The PostgreSQL read model is the source of truth for lists/dashboards.
 - **CSV ERP sync** writes one file per PO; a failed sync marks the PO FAILED and
   leaves it issued, retryable by finance/ops.
@@ -583,28 +586,28 @@ Never commit `.env` or real secrets. `.env.example` contains local-only placehol
 **`Cannot find module '@procureflow/...'`** — run `pnpm install` at the repo root
 (workspace packages are linked through pnpm).
 
-**Reworked Temporal build fails** — install Go 1.27+ (`go version`) or let
-`GOTOOLCHAIN=auto` download it. `pnpm temporal:build` prints the exact command.
-Windows users can use the Node-based build/run scripts (`pnpm temporal:build`,
-`pnpm temporal:dev`) or WSL/Git Bash for the `.sh` equivalents.
+**Reworked engine build fails** — install Go 1.27+ (`go version`) or let
+`GOTOOLCHAIN=auto` download it. `pnpm engine:build` prints the exact command.
+Windows users can use the Node-based build/run scripts (`pnpm engine:build`,
+`pnpm engine:dev`) or WSL/Git Bash for the `.sh` equivalents.
 
-**Port 7233 already in use** — another Temporal dev server is running. Stop it, or
-change `TEMPORAL_ADDRESS`/the dev ports consistently. The reworked config uses
+**Port 7233 already in use** — another workflow engine dev server is running. Stop it, or
+change `WORKFLOW_ENGINE_ADDRESS`/the dev ports consistently. The reworked config uses
 7233/7243 and the stock CLI uses 7233/8233.
 
 **Search attribute upsert fails (`invalid search attribute`)** — you are running a
-stock server with `TEMPORAL_REWORK_ENABLED=true` but without the ProcureFlow
-attributes. Set the flag to `false`, or run `pnpm temporal:dev` (bootstrap creates
-them), or register them manually with `temporal operator search-attribute create`.
+stock server with `WORKFLOW_ENGINE_SEARCH_ATTRIBUTES=true` but without the ProcureFlow
+attributes. Set the flag to `false`, or run `pnpm engine:dev` (bootstrap creates
+them), or register them through the engine operator tooling.
 
-**Workflow query returns null / “state unavailable”** — the worker or Temporal is not
+**Workflow query returns null / “state unavailable”** — the worker or workflow engine is not
 reachable; the DB read model still renders. Check `/api/health` and the worker log.
 
 **Login works but pages redirect to `/login`** — `AUTH_SECRET` changed between
 processes, or the browser clock/cookie domain differs. Restart web/worker with the
 same `.env`.
 
-**Stock CLI workflow tests download slowly the first time** — `@temporalio/testing`
+**Stock engine workflow tests download slowly the first time** — the test harness
 caches the test server under the OS temp directory. Subsequent runs are fast.
 
 ---
@@ -623,13 +626,13 @@ If `gh` is unavailable, create an empty GitHub repository and run:
 git remote add origin git@github.com:<you>/procureflow.git
 git branch -M main
 git push -u origin main
-git push --tags   # publish temporal-base-96a50b1 for the CI provenance guard
+git push --tags   # publish vendor-base-96a50b1 for the CI provenance guard
 ```
 
-Add repository secrets for Render/Temporal/Neon; never commit them. CI runs on push
-and pull requests once the repo is on GitHub.
+Add repository secrets for Render, Neon and your engine endpoint; never commit them.
+CI runs on push and pull requests once the repo is on GitHub.
 
 ## License
 
-MIT — see [`LICENSE`](./LICENSE). The vendored Temporal tree retains its MIT license
+MIT — see [`LICENSE`](./LICENSE). The vendored workflow engine tree retains its MIT license
 at `third_party/temporal/LICENSE`.

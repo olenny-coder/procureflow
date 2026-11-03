@@ -1,4 +1,4 @@
-// ProcureFlow Temporal bootstrap.
+// ProcureFlow workflow-engine bootstrap.
 //
 // This command is part of the locally reworked Temporal distribution under
 // third_party/temporal. It is NOT imported by the app; the app only talks to
@@ -43,11 +43,23 @@ func env(name, fallback string) string {
 	return fallback
 }
 
+// envWithFallback accepts the neutral name first and a legacy name second, so
+// deployments can migrate without a coordinated environment change.
+func envWithFallback(primary, legacy, fallback string) string {
+	if value := env(primary, ""); value != "" {
+		return value
+	}
+	if value := env(legacy, ""); value != "" {
+		return value
+	}
+	return fallback
+}
+
 func logEvent(level, msg string, fields map[string]any) {
 	parts := make([]string, 0, len(fields)+3)
 	parts = append(parts, fmt.Sprintf(`"level":%q`, level))
 	parts = append(parts, fmt.Sprintf(`"msg":%q`, msg))
-	parts = append(parts, fmt.Sprintf(`"service":"procureflow-temporal-bootstrap"`))
+	parts = append(parts, fmt.Sprintf(`"service":"procureflow-engine-bootstrap"`))
 	for key, value := range fields {
 		switch typed := value.(type) {
 		case string:
@@ -69,27 +81,31 @@ func fail(msg string, err error) {
 }
 
 func main() {
-	address := env("TEMPORAL_ADDRESS", defaultAddress)
-	namespace := env("TEMPORAL_NAMESPACE", defaultNamespace)
+	address := envWithFallback("WORKFLOW_ENGINE_ADDRESS", "TEMPORAL_ADDRESS", defaultAddress)
+	namespace := envWithFallback("WORKFLOW_ENGINE_NAMESPACE", "TEMPORAL_NAMESPACE", defaultNamespace)
 	waitSeconds := 120
-	if raw := env("TEMPORAL_BOOTSTRAP_WAIT_SECONDS", ""); raw != "" {
+	if raw := envWithFallback("WORKFLOW_ENGINE_BOOTSTRAP_WAIT_SECONDS", "TEMPORAL_BOOTSTRAP_WAIT_SECONDS", ""); raw != "" {
 		if parsed, err := strconv.Atoi(raw); err == nil && parsed > 0 {
 			waitSeconds = parsed
 		}
 	}
 
 	attributeNames := strings.Split(
-		env("TEMPORAL_BOOTSTRAP_SEARCH_ATTRIBUTES", "ProcureFlowDepartment,ProcureFlowRisk,ProcureFlowStatus"),
+		envWithFallback(
+			"WORKFLOW_ENGINE_BOOTSTRAP_SEARCH_ATTRIBUTES",
+			"TEMPORAL_BOOTSTRAP_SEARCH_ATTRIBUTES",
+			"ProcureFlowDepartment,ProcureFlowRisk,ProcureFlowStatus",
+		),
 		",",
 	)
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(waitSeconds)*time.Second)
 	defer cancel()
 
-	var temporalClient client.Client
+	var engineClient client.Client
 	var dialErr error
 	for {
-		temporalClient, dialErr = client.DialContext(ctx, client.Options{
+		engineClient, dialErr = client.DialContext(ctx, client.Options{
 			HostPort:  address,
 			Namespace: namespace,
 		})
@@ -97,19 +113,22 @@ func main() {
 			break
 		}
 		if ctx.Err() != nil {
-			fail("temporal_bootstrap_dial_timeout", fmt.Errorf("could not connect to %s: %w", address, dialErr))
+			fail("engine_bootstrap_dial_timeout", fmt.Errorf("could not connect to %s: %w", address, dialErr))
 		}
 		time.Sleep(time.Second)
 	}
-	defer temporalClient.Close()
+	defer engineClient.Close()
 
-	if _, err := temporalClient.CheckHealth(ctx, &client.CheckHealthRequest{}); err != nil {
-		fail("temporal_bootstrap_health_failed", err)
+	if _, err := engineClient.CheckHealth(ctx, &client.CheckHealthRequest{}); err != nil {
+		fail("engine_bootstrap_health_failed", err)
 	}
-	logEvent("info", "temporal_bootstrap_connected", map[string]any{"address": address, "namespace": namespace})
+	logEvent("info", "engine_bootstrap_connected", map[string]any{"address": address, "namespace": namespace})
 
-	if err := ensureNamespace(ctx, temporalClient, namespace); err != nil {
-		fail("temporal_bootstrap_namespace_failed", err)
+	if err := ensureNamespace(ctx, engineClient, namespace); err != nil {
+		fail("engine_bootstrap_namespace_failed", err)
+	}
+	if err := waitForNamespace(ctx, engineClient, namespace); err != nil {
+		fail("engine_bootstrap_namespace_not_ready", err)
 	}
 
 	ensured := 0
@@ -118,7 +137,7 @@ func main() {
 		if name == "" {
 			continue
 		}
-		_, err := temporalClient.OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
+		_, err := engineClient.OperatorService().AddSearchAttributes(ctx, &operatorservice.AddSearchAttributesRequest{
 			Namespace: namespace,
 			SearchAttributes: map[string]enumspb.IndexedValueType{
 				name: enumspb.INDEXED_VALUE_TYPE_KEYWORD,
@@ -127,28 +146,28 @@ func main() {
 		if err != nil {
 			var alreadyExists *serviceerror.AlreadyExists
 			if errors.As(err, &alreadyExists) {
-				logEvent("info", "temporal_bootstrap_search_attribute_exists", map[string]any{"attribute": name})
+				logEvent("info", "engine_bootstrap_search_attribute_exists", map[string]any{"attribute": name})
 				continue
 			}
-			fail("temporal_bootstrap_search_attribute_failed", fmt.Errorf("%s: %w", name, err))
+			fail("engine_bootstrap_search_attribute_failed", fmt.Errorf("%s: %w", name, err))
 		}
 		ensured++
-		logEvent("info", "temporal_bootstrap_search_attribute_ready", map[string]any{"attribute": name})
+		logEvent("info", "engine_bootstrap_search_attribute_ready", map[string]any{"attribute": name})
 	}
 
-	logEvent("info", "temporal_bootstrap_complete", map[string]any{
+	logEvent("info", "engine_bootstrap_complete", map[string]any{
 		"address":                 address,
 		"namespace":               namespace,
 		"searchAttributesEnsured": ensured,
 	})
 }
 
-func ensureNamespace(ctx context.Context, temporalClient client.Client, namespace string) error {
-	_, err := temporalClient.WorkflowService().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+func ensureNamespace(ctx context.Context, engineClient client.Client, namespace string) error {
+	_, err := engineClient.WorkflowService().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
 		Namespace: namespace,
 	})
 	if err == nil {
-		logEvent("info", "temporal_bootstrap_namespace_exists", map[string]any{"namespace": namespace})
+		logEvent("info", "engine_bootstrap_namespace_exists", map[string]any{"namespace": namespace})
 		return nil
 	}
 
@@ -157,7 +176,7 @@ func ensureNamespace(ctx context.Context, temporalClient client.Client, namespac
 		return fmt.Errorf("describe namespace: %w", err)
 	}
 
-	_, err = temporalClient.WorkflowService().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
+	_, err = engineClient.WorkflowService().RegisterNamespace(ctx, &workflowservice.RegisterNamespaceRequest{
 		Namespace:                        namespace,
 		WorkflowExecutionRetentionPeriod: durationpb.New(7 * 24 * time.Hour),
 	})
@@ -168,6 +187,31 @@ func ensureNamespace(ctx context.Context, temporalClient client.Client, namespac
 		}
 		return fmt.Errorf("register namespace: %w", err)
 	}
-	logEvent("info", "temporal_bootstrap_namespace_created", map[string]any{"namespace": namespace})
+	logEvent("info", "engine_bootstrap_namespace_created", map[string]any{"namespace": namespace})
 	return nil
+}
+
+// waitForNamespace closes the small window between RegisterNamespace and the
+// namespace becoming visible to the operator/frontend caches used by
+// AddSearchAttributes. Without this, a fresh local database can fail with
+// "Namespace ... is not found" immediately after creation.
+func waitForNamespace(ctx context.Context, engineClient client.Client, namespace string) error {
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		_, err := engineClient.WorkflowService().DescribeNamespace(ctx, &workflowservice.DescribeNamespaceRequest{
+			Namespace: namespace,
+		})
+		if err == nil {
+			logEvent("info", "engine_bootstrap_namespace_ready", map[string]any{"namespace": namespace})
+			return nil
+		}
+		if time.Now().After(deadline) {
+			return fmt.Errorf("namespace %s did not become ready: %w", namespace, err)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(250 * time.Millisecond):
+		}
+	}
 }

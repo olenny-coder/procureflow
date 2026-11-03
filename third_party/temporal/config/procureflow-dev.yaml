@@ -1,12 +1,12 @@
-# ProcureFlow local Temporal configuration.
+# ProcureFlow local engine configuration.
 #
-# This is the local rework overlay used by scripts/run-temporal-dev.sh. It keeps
+# This is the local rework overlay used by scripts/run-engine-dev.sh. It keeps
 # upstream's single-binary development topology but uses a durable SQLite file
 # (instead of an in-memory store) so approval workflows survive restarts.
 #
 # The server itself is unmodified upstream Go code; the ProcureFlow bootstrap
 # command (cmd/tools/procureflow-bootstrap) creates the namespace and the custom
-# search attributes used by the app. See TEMPORAL_MODIFICATIONS.md.
+# search attributes used by the app. See VENDOR_MODIFICATIONS.md.
 
 log:
   stdout: true
@@ -22,7 +22,7 @@ persistence:
         user: ""
         password: ""
         pluginName: "sqlite"
-        databaseName: ".build/temporal.db"
+        databaseName: ".build/engine.db"
         connectAddr: "localhost"
         connectProtocol: "tcp"
         connectAttributes:
@@ -45,7 +45,7 @@ persistence:
         user: ""
         password: ""
         pluginName: "sqlite"
-        databaseName: ".build/temporal.db"
+        databaseName: ".build/engine.db"
         connectAddr: "localhost"
         connectProtocol: "tcp"
         connectAttributes:

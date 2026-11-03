@@ -13,7 +13,7 @@ body:
     id: proposal
     attributes:
       label: Proposed change
-      description: Keep it production-lean. Note whether it needs SDK/interceptor/worker-plugin changes or a Temporal server change.
+      description: Keep it production-lean. Note whether it needs SDK/interceptor/worker-plugin changes or a workflow-engine change.
     validations:
       required: true
   - type: dropdown
@@ -25,4 +25,4 @@ body:
         - Interceptor
         - Worker Plugin / adapter
         - Dynamic configuration
-        - Server source rework (requires TEMPORAL_MODIFICATIONS.md entry)
+        - Server source rework (requires a VENDOR_MODIFICATIONS.md entry)

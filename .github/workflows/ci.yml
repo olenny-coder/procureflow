@@ -17,7 +17,7 @@ jobs:
     name: Install, lint, typecheck, unit tests, build
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout (full history for Temporal diff)
+      - name: Checkout (full history for vendor diff)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -36,8 +36,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify Temporal modification log
-        run: pnpm temporal:check
+      - name: Verify vendor modification log
+        run: pnpm engine:check
 
       - name: Lint
         run: pnpm lint
@@ -55,8 +55,8 @@ jobs:
           AUTH_URL: http://localhost:3000
           NEXTAUTH_URL: http://localhost:3000
 
-  stock-temporal:
-    name: Workflows + E2E against stock Temporal CLI
+  stock-engine:
+    name: Workflows + E2E against stock workflow engine
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     services:
@@ -82,10 +82,10 @@ jobs:
       AUTH_URL: http://localhost:3000
       NEXTAUTH_URL: http://localhost:3000
       AUTH_TRUST_HOST: "true"
-      TEMPORAL_ADDRESS: 127.0.0.1:7233
-      TEMPORAL_NAMESPACE: default
-      TEMPORAL_TASK_QUEUE: procureflow
-      TEMPORAL_REWORK_ENABLED: "false"
+      WORKFLOW_ENGINE_ADDRESS: 127.0.0.1:7233
+      WORKFLOW_ENGINE_NAMESPACE: default
+      WORKFLOW_ENGINE_TASK_QUEUE: procureflow
+      WORKFLOW_ENGINE_SEARCH_ATTRIBUTES: "false"
       INTERNAL_API_TOKEN: ci-internal-token
       EMAIL_ADAPTER: console
     steps:
@@ -108,30 +108,30 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Cache Temporal CLI download
+      - name: Cache engine CLI download
         uses: actions/cache@v4
         with:
-          path: .tools/temporal-cli
-          key: temporal-cli-1.9.1-${{ runner.os }}-${{ runner.arch }}
+          path: .tools/engine-cli
+          key: engine-cli-1.9.1-${{ runner.os }}-${{ runner.arch }}
 
       - name: Migrate and seed Postgres
         run: |
           pnpm db:migrate
           pnpm db:seed
 
-      - name: Start stock Temporal CLI dev server
+      - name: Start stock workflow engine dev server
         run: |
-          pnpm temporal:dev:stock > /tmp/temporal.log 2>&1 &
+          pnpm engine:dev:stock > /tmp/engine.log 2>&1 &
           for i in $(seq 1 60); do
             if (echo > /dev/tcp/127.0.0.1/7233) >/dev/null 2>&1; then
-              echo "Temporal is up"
+              echo "Workflow engine is up"
               break
             fi
             sleep 2
           done
-          (echo > /dev/tcp/127.0.0.1/7233) >/dev/null 2>&1 || { cat /tmp/temporal.log; exit 1; }
+          (echo > /dev/tcp/127.0.0.1/7233) >/dev/null 2>&1 || { cat /tmp/engine.log; exit 1; }
 
-      - name: Workflow integration tests (@temporalio/testing)
+      - name: Workflow integration tests
         run: pnpm test:workflows
 
       - name: Start worker and web
@@ -154,15 +154,15 @@ jobs:
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: stock-temporal-logs
+          name: stock-engine-logs
           path: |
-            /tmp/temporal.log
+            /tmp/engine.log
             /tmp/worker.log
             /tmp/web.log
           if-no-files-found: ignore
 
-  temporal-rework-build:
-    name: Build reworked Temporal (compile-only)
+  engine-build:
+    name: Build local workflow engine (compile-only)
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     steps:
@@ -182,4 +182,4 @@ jobs:
           node-version: 20
 
       - name: Build server + ProcureFlow bootstrap
-        run: node scripts/temporal-build.mjs
+        run: node scripts/engine-build.mjs

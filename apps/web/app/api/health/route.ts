@@ -48,11 +48,11 @@ export async function GET() {
           namespace: orchestration.namespace,
           taskQueue: orchestration.taskQueue,
           engineVersion: orchestration.serverVersion,
-          searchAttributesEnabled: orchestration.reworkEnabled,
+          searchAttributesEnabled: orchestration.searchAttributesEnabled,
           ...(orchestration.error ? { error: orchestration.error } : {}),
         },
       },
-      features: { searchAttributes: config.reworkEnabled },
+      features: { searchAttributes: config.searchAttributesEnabled },
     },
     healthy ? 200 : 503,
   );

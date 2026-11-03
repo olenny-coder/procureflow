@@ -1,7 +1,7 @@
 import "@procureflow/shared/load-env";
 import { createRequire } from "node:module";
 import { NativeConnection, Worker } from "@temporalio/worker";
-import { envBool, getTemporalConfig } from "@procureflow/shared";
+import { envBool, getWorkflowEngineConfig } from "@procureflow/shared";
 import { createIntegrationsWorkerPlugin } from "@procureflow/integrations";
 import {
   createActivities,
@@ -25,7 +25,7 @@ function log(msg: string, fields: Record<string, unknown> = {}): void {
 }
 
 async function main(): Promise<void> {
-  const config = getTemporalConfig();
+  const config = getWorkflowEngineConfig();
   const auditInterceptorsEnabled = envBool("PROCUREFLOW_AUDIT_INTERCEPTOR_ENABLED", true);
   const workerPluginEnabled = envBool("PROCUREFLOW_WORKER_PLUGIN_ENABLED", true);
 
@@ -58,7 +58,7 @@ async function main(): Promise<void> {
     address: config.address,
     namespace: config.namespace,
     taskQueue: config.taskQueue,
-    reworkEnabled: config.reworkEnabled,
+    searchAttributesEnabled: config.searchAttributesEnabled,
     auditInterceptorsEnabled,
     workerPluginEnabled,
   });

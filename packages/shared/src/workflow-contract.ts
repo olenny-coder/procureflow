@@ -1,5 +1,5 @@
 /**
- * Temporal contract shared by the web API (client), the worker and tests.
+ * Workflow contract shared by the web API (client), the worker and tests.
  * This file is plain TypeScript so both the Next.js server and the workflow
  * bundle can import it without pulling in Node-only modules.
  */
@@ -38,18 +38,10 @@ export const VENDOR_QUERIES = {
   getVendorState: "getVendorState",
 } as const;
 
-/** gRPC metadata forwarded by the client interceptor and read by the worker. */
-export const TEMPORAL_HEADERS = {
-  actorId: "x-procureflow-actor-id",
-  actorRole: "x-procureflow-actor-role",
-  requestId: "x-procureflow-request-id",
-  correlationId: "x-procureflow-correlation-id",
-} as const;
-
 /**
- * Custom search attributes auto-registered by the reworked Temporal server.
- * They are only upserted when TEMPORAL_REWORK_ENABLED=true because stock
- * Temporal rejects unregistered attributes.
+ * Custom search attributes provisioned by the local workflow engine.
+ * They are only upserted when WORKFLOW_ENGINE_SEARCH_ATTRIBUTES=true because a
+ * stock engine rejects unregistered attributes.
  */
 export const PROCUREFLOW_SEARCH_ATTRIBUTES = {
   department: "ProcureFlowDepartment",
@@ -61,8 +53,8 @@ export interface PurchaseRequestWorkflowInput {
   requestId: string;
   actorId: string;
   actorRole: Role;
-  /** True only when connected to the reworked server with auto-registered SAs. */
-  reworkSearchAttributes: boolean;
+  /** True only when connected to an engine with provisioned search attributes. */
+  searchAttributesEnabled: boolean;
 }
 
 export interface DecisionSignalInput {

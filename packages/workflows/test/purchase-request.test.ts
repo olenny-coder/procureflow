@@ -296,7 +296,7 @@ describe("PurchaseRequestWorkflow", () => {
             requestId: "req-1",
             actorId: "user-requester",
             actorRole: "REQUESTER",
-            reworkSearchAttributes: false,
+            searchAttributesEnabled: false,
           },
         ],
       });

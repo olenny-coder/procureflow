@@ -59,7 +59,7 @@ export function LoginForm({ callbackUrl }: { callbackUrl: string }) {
         setError("Those credentials did not match an active account.");
         return;
       }
-      router.push(callbackUrl.startsWith("/") ? callbackUrl : "/");
+      router.push(callbackUrl.startsWith("/") ? callbackUrl : "/dashboard");
       router.refresh();
     } catch {
       setError("Unable to sign in right now. Check that the web app and database are running.");

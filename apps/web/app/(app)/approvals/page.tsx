@@ -23,7 +23,7 @@ export default async function ApprovalsPage() {
           title="Approvals are handled by approvers, finance and admins"
           description="Your account can submit and track requests. Sign in with an approver account to act on approval tasks."
           action={
-            <Link href="/" className="text-sm font-medium text-brand-600 hover:text-brand-700">
+            <Link href="/dashboard" className="text-sm font-medium text-brand-600 hover:text-brand-700">
               Back to dashboard
             </Link>
           }
@@ -87,7 +87,7 @@ export default async function ApprovalsPage() {
             title="Inbox zero"
             description="No approval tasks are waiting on you. New tasks appear here the moment policy routes them."
             action={
-              <Link href="/" className="text-sm font-medium text-brand-600 hover:text-brand-700">
+              <Link href="/dashboard" className="text-sm font-medium text-brand-600 hover:text-brand-700">
                 Back to dashboard
               </Link>
             }

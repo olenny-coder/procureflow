@@ -19,12 +19,15 @@ coverage/
 # Local tooling binaries / databases (never committed)
 .tools/
 .data/
+.engine/
 .temporal/
 *.log
 
-# Temporal reworked server build artifacts (source is vendored, binaries are not)
+# Local engine build artifacts (source is vendored, binaries are not)
 third_party/temporal/.build/
 third_party/temporal/bin/
+third_party/temporal/engine-server
+third_party/temporal/engine-server.exe
 third_party/temporal/temporal-server
 third_party/temporal/temporal-server.exe
 third_party/temporal/tools/sql/sql-tool

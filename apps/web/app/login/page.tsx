@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/session";
+import { Logo } from "@/components/brand/logo";
 import { LoginForm } from "./login-form";
 
 export const metadata: Metadata = {
@@ -13,7 +14,7 @@ export default async function LoginPage({
   searchParams: { callbackUrl?: string };
 }) {
   const user = await getSessionUser();
-  if (user) redirect("/");
+  if (user) redirect("/dashboard");
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[1.05fr_1fr]">
@@ -22,18 +23,15 @@ export default async function LoginPage({
           className="pointer-events-none absolute inset-0 opacity-80"
           style={{
             backgroundImage:
-              "radial-gradient(60% 60% at 12% 8%, rgba(99,102,241,0.45), transparent 60%), radial-gradient(55% 55% at 88% 90%, rgba(14,165,233,0.28), transparent 60%)",
+              "radial-gradient(60% 60% at 12% 8%, rgba(47,109,246,0.4), transparent 60%), radial-gradient(55% 55% at 88% 90%, rgba(90,145,255,0.2), transparent 60%)",
           }}
         />
         <div className="relative">
-          <div className="flex items-center gap-3">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 text-sm font-bold ring-1 ring-white/20 backdrop-blur">
-              PF
-            </div>
-            <div>
-              <p className="font-semibold tracking-tight">ProcureFlow</p>
-              <p className="text-xs uppercase tracking-[0.18em] text-white/50">Procurement OS</p>
-            </div>
+          <div>
+            <Logo tone="dark" markClassName="h-10 w-10" />
+            <p className="mt-2 font-mono text-[10px] uppercase tracking-[0.18em] text-white/35">
+              Procurement OS
+            </p>
           </div>
 
           <div className="mt-20 max-w-lg">
@@ -81,18 +79,13 @@ export default async function LoginPage({
       <section className="flex items-center justify-center px-5 py-12 sm:px-10">
         <div className="w-full max-w-md animate-fade-up">
           <div className="mb-8 lg:hidden">
-            <div className="flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 text-xs font-bold text-white">
-                PF
-              </div>
-              <span className="text-lg font-semibold tracking-tight">ProcureFlow</span>
-            </div>
+            <Logo tone="light" markClassName="h-9 w-9" />
           </div>
           <h2 className="text-2xl font-semibold tracking-tight text-slate-900">Welcome back</h2>
           <p className="mt-1.5 text-sm text-slate-500">
             Sign in with a demo account to run the procurement flow end to end.
           </p>
-          <LoginForm callbackUrl={searchParams.callbackUrl ?? "/"} />
+          <LoginForm callbackUrl={searchParams.callbackUrl ?? "/dashboard"} />
         </div>
       </section>
     </div>

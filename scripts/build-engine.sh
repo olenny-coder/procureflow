@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Build the locally reworked Temporal server from third_party/temporal.
+# Build the locally reworked engine server from third_party/temporal.
 #
 # Requirements: Go 1.27+ (the repo's go.mod toolchain is honored via GOTOOLCHAIN).
-# Output: third_party/temporal/.build/bin/{temporal-server,procureflow-bootstrap}
+# Output: third_party/temporal/.build/bin/{engine-server,procureflow-bootstrap}
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,12 +25,12 @@ export CGO_ENABLED=0
 export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
 
 echo "==> building Temporal server from $SRC"
-(cd "$SRC" && "$GO" build -trimpath -ldflags "-s -w" -o "$OUT/temporal-server" ./cmd/server)
+(cd "$SRC" && "$GO" build -trimpath -ldflags "-s -w" -o "$OUT/engine-server" ./cmd/server)
 
 echo "==> building ProcureFlow Temporal bootstrap"
 (cd "$SRC" && "$GO" build -trimpath -ldflags "-s -w" -o "$OUT/procureflow-bootstrap" ./cmd/tools/procureflow-bootstrap)
 
 echo "==> built:"
-ls -lh "$OUT/temporal-server" "$OUT/procureflow-bootstrap"
+ls -lh "$OUT/engine-server" "$OUT/procureflow-bootstrap"
 echo
-echo "Run it with: pnpm temporal:dev"
+echo "Run it with: pnpm engine:dev"

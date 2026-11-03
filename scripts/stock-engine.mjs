@@ -1,37 +1,37 @@
 #!/usr/bin/env node
 /**
- * Download (if needed) and run the stock Temporal CLI dev server.
- * Used by `pnpm temporal:dev:stock` and `pnpm dev:stock-temporal`.
+ * Download (if needed) and run the stock engine CLI dev server.
+ * Used by `pnpm engine:dev:stock` and `pnpm dev:stock-engine`.
  *
  * Registers the ProcureFlow search attributes too, but the app only uses them
- * when TEMPORAL_REWORK_ENABLED=true (off for stock runs).
+ * when WORKFLOW_ENGINE_SEARCH_ATTRIBUTES=true (off for stock runs).
  */
 import { spawn, spawnSync } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, renameSync } from "node:fs";
 import { Readable } from "node:stream";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const toolsDir = path.join(root, ".tools", "temporal-cli");
+const toolsDir = path.join(root, ".tools", "engine-cli");
 const exe = process.platform === "win32" ? ".exe" : "";
-const binary = path.join(toolsDir, `temporal${exe}`);
-const TEMPORAL_CLI_VERSION = "1.9.1";
+const binary = path.join(toolsDir, `engine${exe}`);
+const ENGINE_CLI_VERSION = "1.9.1";
 
 function archiveForPlatform() {
   const arch = process.arch === "x64" ? "amd64" : process.arch === "arm64" ? "arm64" : process.arch;
-  if (process.platform === "win32") return `temporal_cli_${TEMPORAL_CLI_VERSION}_windows_${arch}.zip`;
-  if (process.platform === "darwin") return `temporal_cli_${TEMPORAL_CLI_VERSION}_darwin_${arch}.tar.gz`;
-  return `temporal_cli_${TEMPORAL_CLI_VERSION}_linux_${arch}.tar.gz`;
+  if (process.platform === "win32") return `temporal_cli_${ENGINE_CLI_VERSION}_windows_${arch}.zip`;
+  if (process.platform === "darwin") return `temporal_cli_${ENGINE_CLI_VERSION}_darwin_${arch}.tar.gz`;
+  return `temporal_cli_${ENGINE_CLI_VERSION}_linux_${arch}.tar.gz`;
 }
 
 async function downloadCli() {
   const archiveName = archiveForPlatform();
-  const url = `https://github.com/temporalio/cli/releases/download/v${TEMPORAL_CLI_VERSION}/${archiveName}`;
+  const url = `https://github.com/temporalio/cli/releases/download/v${ENGINE_CLI_VERSION}/${archiveName}`;
   const archivePath = path.join(toolsDir, archiveName);
   mkdirSync(toolsDir, { recursive: true });
 
-  console.log(`[temporal:stock] downloading Temporal CLI ${TEMPORAL_CLI_VERSION}`);
+  console.log(`[engine:stock] downloading engine CLI ${ENGINE_CLI_VERSION}`);
   const response = await fetch(url, { redirect: "follow" });
   if (!response.ok || !response.body) {
     throw new Error(`Failed to download ${url}: HTTP ${response.status}`);
@@ -43,10 +43,14 @@ async function downloadCli() {
     file.on("error", reject);
   });
 
-  console.log("[temporal:stock] extracting CLI");
+  console.log("[engine:stock] extracting CLI");
   const extracted = spawnSync("tar", ["-xf", archivePath, "-C", toolsDir], { stdio: "inherit" });
-  if (extracted.status !== 0 || !existsSync(binary)) {
-    throw new Error("Could not extract the Temporal CLI archive (tar is required).");
+  const unpacked = path.join(toolsDir, `temporal${exe}`);
+  if (extracted.status !== 0 || !existsSync(unpacked)) {
+    throw new Error("Could not extract the engine CLI archive (tar is required).");
+  }
+  if (unpacked !== binary) {
+    renameSync(unpacked, binary);
   }
 }
 
@@ -55,17 +59,17 @@ async function main() {
     await downloadCli();
   }
 
-  mkdirSync(path.join(root, ".temporal"), { recursive: true });
+  mkdirSync(path.join(root, ".engine"), { recursive: true });
 
   const args = [
     "server",
     "start-dev",
     "--db-filename",
-    path.join(root, ".temporal", "dev.db"),
+    path.join(root, ".engine", "dev.db"),
     "--port",
-    process.env.TEMPORAL_PORT ?? "7233",
+    process.env.WORKFLOW_ENGINE_PORT ?? "7233",
     "--ui-port",
-    process.env.TEMPORAL_UI_PORT ?? "8233",
+    process.env.WORKFLOW_ENGINE_UI_PORT ?? "8233",
     "--search-attribute",
     "ProcureFlowDepartment=Keyword",
     "--search-attribute",
@@ -73,10 +77,10 @@ async function main() {
     "--search-attribute",
     "ProcureFlowStatus=Keyword",
     "--log-level",
-    process.env.TEMPORAL_LOG_LEVEL ?? "warn",
+    process.env.WORKFLOW_ENGINE_LOG_LEVEL ?? "warn",
   ];
 
-  console.log(`[temporal:stock] ${binary} ${args.join(" ")}`);
+  console.log(`[engine:stock] ${binary} ${args.join(" ")}`);
   const child = spawn(binary, args, {
     cwd: root,
     stdio: "inherit",
@@ -89,6 +93,6 @@ async function main() {
 }
 
 main().catch((error) => {
-  console.error(`[temporal:stock] ${error.message}`);
+  console.error(`[engine:stock] ${error.message}`);
   process.exit(1);
 });

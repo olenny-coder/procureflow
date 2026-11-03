@@ -1,14 +1,14 @@
-# ProcureFlow â€” Render Blueprint (managed deployment)
+# ProcureFlow - Render Blueprint (managed deployment)
 #
 # Managed split:
 #   - Web + worker run on Render.
 #   - PostgreSQL is Neon (pooled DATABASE_URL, direct DIRECT_URL).
-#   - Temporal is Temporal Cloud or another external Temporal endpoint.
-#   - The reworked Temporal under third_party/temporal is NOT deployed to Render.
+#   - The workflow engine is an external endpoint (managed service or self-hosted).
+#   - The local engine under third_party/temporal is NOT deployed to Render.
 #
 # After the first deploy, set:
 #   AUTH_URL / NEXTAUTH_URL = https://<your-web-service>.onrender.com
-#   TEMPORAL_ADDRESS / TEMPORAL_NAMESPACE / TEMPORAL_API_KEY for Temporal Cloud
+#   WORKFLOW_ENGINE_ADDRESS / NAMESPACE / API_KEY for the managed engine endpoint
 #
 # Render sets RENDER_EXTERNAL_URL automatically; next.config.mjs falls back to it
 # for Auth.js URLs when AUTH_URL is unset.
@@ -30,19 +30,19 @@ envVarGroups:
         generateValue: true
       - key: AUTH_TRUST_HOST
         value: "true"
-      - key: TEMPORAL_ADDRESS
-        sync: false # e.g. your-namespace.a2.temporal.io:7233
-      - key: TEMPORAL_NAMESPACE
+      - key: WORKFLOW_ENGINE_ADDRESS
+        sync: false # e.g. your-namespace.example.com:7233
+      - key: WORKFLOW_ENGINE_NAMESPACE
         sync: false
-      - key: TEMPORAL_TASK_QUEUE
+      - key: WORKFLOW_ENGINE_TASK_QUEUE
         value: procureflow
-      - key: TEMPORAL_TLS
+      - key: WORKFLOW_ENGINE_TLS
         value: "true"
-      - key: TEMPORAL_API_KEY
+      - key: WORKFLOW_ENGINE_API_KEY
         sync: false
-      - key: TEMPORAL_REWORK_ENABLED
+      - key: WORKFLOW_ENGINE_SEARCH_ATTRIBUTES
         value: "false"
-      - key: TEMPORAL_UI_URL
+      - key: WORKFLOW_ENGINE_UI_URL
         sync: false
       - key: AUTH_URL
         sync: false

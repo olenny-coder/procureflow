@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
  * One-command local development:
- *   Postgres -> Temporal (reworked by default) -> migrations/seed -> worker -> web
+ *   Postgres -> workflow engine (reworked by default) -> migrations/seed -> worker -> web
  *
  * Flags:
- *   --stock-temporal   use the upstream Temporal CLI dev server instead of the rework
- *   --skip-seed        do not run the idempotent demo seed
+ *   --stock-engine   use the stock engine CLI dev server instead of the local rework
+ *   --skip-seed      do not run the idempotent demo seed
  */
 import { spawn, spawnSync } from "node:child_process";
 import net from "node:net";
@@ -19,8 +19,8 @@ loadEnv({ path: path.join(root, ".env") });
 loadEnv({ path: path.join(root, ".env.local"), override: true });
 
 const args = new Set(process.argv.slice(2));
-const stockTemporal = args.has("--stock-temporal");
-const reworkedTemporal = args.has("--reworked-temporal") || !stockTemporal;
+const stockEngine = args.has("--stock-engine");
+const reworkedEngine = args.has("--reworked-engine") || !stockEngine;
 const skipSeed = args.has("--skip-seed");
 
 const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
@@ -130,23 +130,23 @@ process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
 async function main() {
-  log(`mode: ${stockTemporal ? "stock Temporal CLI" : "reworked Temporal (third_party/temporal)"}`);
+  log(`mode: ${stockEngine ? "stock engine CLI" : "reworked engine (local vendor)"}`);
   await ensurePostgres();
 
-  const temporalEnv = { ...process.env };
-  if (stockTemporal) {
-    temporalEnv.TEMPORAL_REWORK_ENABLED = "false";
+  const engineEnv = { ...process.env };
+  if (stockEngine) {
+    engineEnv.WORKFLOW_ENGINE_SEARCH_ATTRIBUTES = "false";
   } else {
-    temporalEnv.TEMPORAL_REWORK_ENABLED = "true";
+    engineEnv.WORKFLOW_ENGINE_SEARCH_ATTRIBUTES = "true";
   }
 
-  if (stockTemporal) {
-    startChild("stock Temporal", process.execPath, [path.join(root, "scripts", "stock-temporal.mjs")], temporalEnv);
+  if (stockEngine) {
+    startChild("stock engine", process.execPath, [path.join(root, "scripts", "stock-engine.mjs")], engineEnv);
   } else {
-    startChild("reworked Temporal", process.execPath, [path.join(root, "scripts", "temporal-dev.mjs")], temporalEnv);
+    startChild("reworked engine", process.execPath, [path.join(root, "scripts", "engine-dev.mjs")], engineEnv);
   }
 
-  await waitForTcp("127.0.0.1", Number(process.env.TEMPORAL_PORT ?? 7233), "Temporal");
+  await waitForTcp("127.0.0.1", Number(process.env.WORKFLOW_ENGINE_PORT ?? 7233), "workflow engine");
 
   log("applying database migrations");
   const migrateExit = await shell(pnpm, ["db:migrate"]);
@@ -159,9 +159,9 @@ async function main() {
 
   const appEnv = {
     ...process.env,
-    TEMPORAL_REWORK_ENABLED: stockTemporal ? "false" : "true",
+    WORKFLOW_ENGINE_SEARCH_ATTRIBUTES: stockEngine ? "false" : "true",
   };
-  startChild("Temporal worker", pnpm, ["--filter", "@procureflow/worker", "start"], appEnv);
+  startChild("workflow worker", pnpm, ["--filter", "@procureflow/worker", "start"], appEnv);
   startChild("Next.js web", pnpm, ["--filter", "@procureflow/web", "dev"], appEnv);
 
   log("ProcureFlow is starting at http://localhost:3000");

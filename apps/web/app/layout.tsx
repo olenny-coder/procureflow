@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
+import "@fontsource-variable/inter-tight";
 import "./globals.css";
 
 export const metadata: Metadata = {
   title: {
-    default: "ProcureFlow — Procurement orchestration",
+    default: "ProcureFlow — Procurement, orchestrated",
     template: "%s · ProcureFlow",
   },
   description:

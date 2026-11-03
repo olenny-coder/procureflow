@@ -27,30 +27,53 @@ export function requireEnv(name: string): string {
   return value;
 }
 
-export interface TemporalConfig {
+export interface WorkflowEngineConfig {
   address: string;
   namespace: string;
   taskQueue: string;
   tls: boolean;
   apiKey?: string;
-  reworkEnabled: boolean;
+  searchAttributesEnabled: boolean;
   uiUrl: string;
 }
 
-export function getTemporalConfig(): TemporalConfig {
+function legacyEnv(name: string): string {
+  return envString(name);
+}
+
+/**
+ * Canonical workflow-engine configuration.
+ *
+ * Legacy environment names are still read as a migration fallback, so existing
+ * deployments can adopt the neutral names without a coordinated deploy.
+ */
+export function getWorkflowEngineConfig(): WorkflowEngineConfig {
   return {
-    address: envString("TEMPORAL_ADDRESS", "127.0.0.1:7233"),
-    namespace: envString("TEMPORAL_NAMESPACE", "default"),
-    taskQueue: envString("TEMPORAL_TASK_QUEUE", "procureflow"),
-    tls: envBool("TEMPORAL_TLS", false),
-    apiKey: envString("TEMPORAL_API_KEY") || undefined,
-    reworkEnabled: envBool("TEMPORAL_REWORK_ENABLED", false),
-    uiUrl: envString("TEMPORAL_UI_URL", "http://localhost:8233"),
+    address:
+      envString("WORKFLOW_ENGINE_ADDRESS") ||
+      legacyEnv("TEMPORAL_ADDRESS") ||
+      "127.0.0.1:7233",
+    namespace:
+      envString("WORKFLOW_ENGINE_NAMESPACE") || legacyEnv("TEMPORAL_NAMESPACE") || "default",
+    taskQueue:
+      envString("WORKFLOW_ENGINE_TASK_QUEUE") ||
+      legacyEnv("TEMPORAL_TASK_QUEUE") ||
+      "procureflow",
+    tls: envBool("WORKFLOW_ENGINE_TLS", envBool("TEMPORAL_TLS", false)),
+    apiKey: envString("WORKFLOW_ENGINE_API_KEY") || legacyEnv("TEMPORAL_API_KEY") || undefined,
+    searchAttributesEnabled: envBool(
+      "WORKFLOW_ENGINE_SEARCH_ATTRIBUTES",
+      envBool("TEMPORAL_REWORK_ENABLED", false),
+    ),
+    uiUrl:
+      envString("WORKFLOW_ENGINE_UI_URL") ||
+      legacyEnv("TEMPORAL_UI_URL") ||
+      "http://localhost:8233",
   };
 }
 
-/** Product-neutral alias used by the app layer. */
-export const getOrchestrationConfig = getTemporalConfig;
+/** Short alias used by app-layer modules. */
+export const getOrchestrationConfig = getWorkflowEngineConfig;
 
 export interface DatabaseConfig {
   url: string;

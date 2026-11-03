@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * CI/local guardrail: every change under third_party/temporal since the pinned
- * base tag must be documented in TEMPORAL_MODIFICATIONS.md.
+ * base tag must be documented in VENDOR_MODIFICATIONS.md.
  */
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
@@ -9,8 +9,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const BASE_TAG = "temporal-base-96a50b1";
-const modsPath = path.join(root, "TEMPORAL_MODIFICATIONS.md");
+const BASE_TAG = "vendor-base-96a50b1";
+const modsPath = path.join(root, "VENDOR_MODIFICATIONS.md");
 
 function git(args, { allowFailure = false } = {}) {
   const result = spawnSync("git", args, { cwd: root, encoding: "utf8" });
@@ -22,7 +22,7 @@ function git(args, { allowFailure = false } = {}) {
 }
 
 if (!existsSync(modsPath)) {
-  console.error("TEMPORAL_MODIFICATIONS.md is missing.");
+  console.error("VENDOR_MODIFICATIONS.md is missing.");
   process.exit(1);
 }
 
@@ -57,13 +57,13 @@ const filtered = [...changed].filter((file) => {
 const undocumented = filtered.filter((file) => !documented.includes(file));
 
 if (undocumented.length > 0) {
-  console.error("The following Temporal changes are not documented in TEMPORAL_MODIFICATIONS.md:");
+  console.error("The following vendored-engine changes are not documented in VENDOR_MODIFICATIONS.md:");
   for (const file of undocumented) console.error(`  - ${file}`);
   process.exit(1);
 }
 
 console.log(
-  `[temporal:check] OK — ${filtered.length} changed file${filtered.length === 1 ? "" : "s"} under third_party/temporal, all documented.`,
+  `[engine:check] OK — ${filtered.length} changed file${filtered.length === 1 ? "" : "s"} under third_party/temporal, all documented.`,
 );
 if (filtered.length > 0) {
   for (const file of filtered) console.log(`  · ${file}`);

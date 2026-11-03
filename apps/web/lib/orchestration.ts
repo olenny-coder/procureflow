@@ -68,7 +68,7 @@ export async function startPurchaseRequestWorkflow(params: {
     requestId: params.requestId,
     actorId: params.actorId,
     actorRole: params.actorRole,
-    reworkSearchAttributes: config.reworkEnabled,
+    searchAttributesEnabled: config.searchAttributesEnabled,
   };
   try {
     const handle = await client.workflow.start(WORKFLOW_NAMES.purchaseRequest, {
@@ -241,7 +241,7 @@ export interface OrchestrationHealth {
   address: string;
   namespace: string;
   taskQueue: string;
-  reworkEnabled: boolean;
+  searchAttributesEnabled: boolean;
   serverVersion?: string;
   error?: string;
 }
@@ -261,7 +261,7 @@ export async function getOrchestrationHealth(): Promise<OrchestrationHealth> {
       address: config.address,
       namespace: config.namespace,
       taskQueue: config.taskQueue,
-      reworkEnabled: config.reworkEnabled,
+      searchAttributesEnabled: config.searchAttributesEnabled,
       serverVersion: info.serverVersion,
     };
   } catch (error) {
@@ -270,7 +270,7 @@ export async function getOrchestrationHealth(): Promise<OrchestrationHealth> {
       address: config.address,
       namespace: config.namespace,
       taskQueue: config.taskQueue,
-      reworkEnabled: config.reworkEnabled,
+      searchAttributesEnabled: config.searchAttributesEnabled,
       error: error instanceof Error ? error.message : String(error),
     };
   } finally {

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Cross-platform build for the locally reworked Temporal distribution.
+ * Cross-platform build for the locally reworked engine distribution.
  * Builds the upstream server plus the ProcureFlow bootstrap command into
  * third_party/temporal/.build/bin (gitignored).
  */
@@ -15,7 +15,7 @@ const outDir = path.join(src, ".build", "bin");
 const exe = process.platform === "win32" ? ".exe" : "";
 
 if (!existsSync(path.join(src, "go.mod"))) {
-  console.error("[temporal:build] third_party/temporal/go.mod not found. Is the vendored tree present?");
+  console.error("[engine:build] third_party/temporal/go.mod not found. Is the vendored tree present?");
   process.exit(1);
 }
 
@@ -23,7 +23,7 @@ const bundledGo = path.join(root, ".tools", "go", "go", "bin", process.platform 
 const go = process.env.GO ?? (existsSync(bundledGo) ? bundledGo : "go");
 
 function run(args) {
-  console.log(`[temporal:build] ${go} ${args.join(" ")}`);
+  console.log(`[engine:build] ${go} ${args.join(" ")}`);
   const result = spawnSync(go, args, {
     cwd: src,
     stdio: "inherit",
@@ -34,11 +34,11 @@ function run(args) {
     },
   });
   if (result.error) {
-    console.error(`[temporal:build] failed to launch go: ${result.error.message}`);
+    console.error(`[engine:build] failed to launch go: ${result.error.message}`);
     process.exit(1);
   }
   if (result.status !== 0) {
-    console.error(`[temporal:build] go exited with status ${result.status}`);
+    console.error(`[engine:build] go exited with status ${result.status}`);
     process.exit(result.status ?? 1);
   }
 }
@@ -46,11 +46,11 @@ function run(args) {
 const version = spawnSync(go, ["version"], { encoding: "utf8" });
 if (version.status !== 0) {
   console.error(
-    "[temporal:build] Go 1.27+ is required. Install Go or place a toolchain at .tools/go, then retry.",
+    "[engine:build] Go 1.27+ is required. Install Go or place a toolchain at .tools/go, then retry.",
   );
   process.exit(1);
 }
-console.log(`[temporal:build] ${version.stdout.trim()}`);
+console.log(`[engine:build] ${version.stdout.trim()}`);
 
 mkdirSync(outDir, { recursive: true });
 run([
@@ -59,7 +59,7 @@ run([
   "-ldflags",
   "-s -w",
   "-o",
-  path.join(outDir, `temporal-server${exe}`),
+  path.join(outDir, `engine-server${exe}`),
   "./cmd/server",
 ]);
 run([
@@ -72,5 +72,5 @@ run([
   "./cmd/tools/procureflow-bootstrap",
 ]);
 
-console.log(`[temporal:build] done -> ${outDir}`);
-console.log("[temporal:build] start with: pnpm temporal:dev");
+console.log(`[engine:build] done -> ${outDir}`);
+console.log("[engine:build] start with: pnpm engine:dev");
