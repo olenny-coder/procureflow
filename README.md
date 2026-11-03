@@ -563,6 +563,42 @@ check will show “not secure” because it bypasses HTTPS; use a real DNS name 
 TLS. A `502 Bad Gateway` means the proxy cannot reach the web container — verify
 the domain is pointing at the Coolify server and the `web` service is healthy.
 
+### DNS, TP-Link router pages, and 127.0.0.1
+
+If the browser opens a TP-Link admin page instead of ProcureFlow, the hostname is
+resolving to the router, not to the Coolify server. `127.0.0.1` is never a valid
+public deployment domain.
+
+1. On the Coolify server, find its public IPv4 address:
+
+   ```bash
+   curl -4 https://ifconfig.me
+   ```
+
+2. At your DNS provider, create an **A record** for the app hostname pointing to
+   that public IP. Do not include `https://`, a port, `127.0.0.1`, or a private
+   `192.168.x.x` address in the DNS record.
+
+3. If the server is behind a TP-Link router, forward inbound TCP **80** and
+   **443** to the server's LAN IP. Do not forward them to the router's own admin
+   interface. A router page on the app hostname usually means the A record points
+   at the router or the request is hitting router management.
+
+4. Verify from an external network / phone hotspot:
+
+   ```bash
+   nslookup app.example.com 8.8.8.8
+   ```
+
+   It must return the public IP from step 1. If it returns `127.0.0.1`,
+   `192.168.x.x`, or the router address, fix the A record and wait for TTL.
+
+5. In Coolify use `https://app.example.com:3000` (or set Port `3000`), and set
+   `APP_URL=https://app.example.com`. Redeploy after the DNS record is correct.
+
+Hairpin NAT can make the domain fail from inside the same LAN even when it works
+externally; test from a phone on cellular data before changing the app.
+
 `AUTH_SECRET` and `INTERNAL_API_TOKEN` are not required during `docker compose build`.
 If omitted at runtime, the web entrypoint generates strong values on first boot and
 persists them in the `procureflow_runtime` volume, so sessions survive restarts.
