@@ -8,7 +8,7 @@ export function HeroRequestPanel() {
         <div className="flex items-center justify-between border-b border-white/10 pb-3">
           <span className="mono-label text-white/40">Request / PR-2041</span>
           <span className="inline-flex items-center gap-1.5 border border-amber-300/25 bg-amber-300/10 px-2 py-0.5 font-mono text-[9px] uppercase tracking-[0.14em] text-amber-200">
-            <span className="h-1 w-1 bg-amber-300" />
+            <span className="h-1 w-1 animate-pulse-line bg-amber-300" />
             In approval
           </span>
         </div>
@@ -63,7 +63,7 @@ export function HeroRequestPanel() {
             <span className="font-mono text-[9px] text-white/30">24h</span>
           </div>
           <div className="flex items-center gap-2.5 border border-brand-400/40 bg-brand-500/[0.06] px-3 py-2">
-            <Clock3 className="h-3.5 w-3.5 shrink-0 text-brand-300" />
+            <Clock3 className="h-3.5 w-3.5 shrink-0 animate-pulse-line text-brand-300" />
             <div className="min-w-0 flex-1">
               <p className="text-[11px] text-white/80">Finley Finance</p>
               <p className="font-mono text-[9px] uppercase tracking-[0.1em] text-brand-300/80">

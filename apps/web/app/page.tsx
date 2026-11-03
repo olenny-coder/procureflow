@@ -10,12 +10,11 @@ import {
   LockKeyhole,
   ReceiptText,
   ShieldCheck,
-  Sparkles,
   Timer,
-  Workflow,
 } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { MarketingNav } from "@/components/marketing/marketing-nav";
+import { LandingMotion } from "@/components/marketing/landing-motion";
 import { HeroRequestPanel } from "@/components/marketing/hero-panel";
 
 export const metadata: Metadata = {
@@ -167,30 +166,31 @@ export default function LandingPage() {
   return (
     <div className="bg-paper">
       <MarketingNav />
+      <LandingMotion />
 
       <main>
         {/* Hero */}
-        <section className="relative overflow-hidden bg-ink-900 text-white">
+        <section className="relative overflow-hidden scroll-mt-16 bg-ink-900 text-white">
           <div className="pointer-events-none absolute inset-0 landing-grid opacity-70" />
           <div className="pointer-events-none absolute left-1/2 top-0 h-[520px] w-[900px] -translate-x-1/2 bg-[radial-gradient(closest-side,rgba(47,109,246,0.2),transparent)]" />
           <div className="relative mx-auto max-w-[1320px] px-5 pb-14 pt-16 sm:px-8 sm:pt-20 lg:pt-24">
-            <div className="grid items-center gap-14 xl:grid-cols-[1.12fr_0.88fr]">
-              <div className="animate-fade-up">
-                <div className="flex items-center gap-3">
-                  <span className="h-2 w-2 bg-brand-500" />
+            <div className="grid items-center gap-14 lg:grid-cols-[1.12fr_0.88fr]">
+              <div>
+                <div className="flex items-center gap-3 animate-fade-up">
+                  <span className="h-2 w-2 bg-brand-500 flow-node" />
                   <SectionLabel light>Procurement orchestration</SectionLabel>
                 </div>
-                <h1 className="mt-6 text-balance text-[clamp(3.5rem,6.5vw,5.15rem)] font-bold leading-[0.93] tracking-[-0.055em]">
+                <h1 className="mt-6 animate-fade-up text-balance text-[clamp(3.5rem,6.5vw,5.15rem)] font-bold leading-[0.93] tracking-[-0.055em] [animation-delay:70ms]">
                   Every purchase.
                   <br />
-                  <span className="text-white/35">One clear path.</span>
+                  <span className="text-white/40">One clear path.</span>
                 </h1>
-                <p className="mt-7 max-w-xl text-[16px] leading-relaxed text-white/55 sm:text-[17px]">
+                <p className="mt-7 max-w-xl animate-fade-up text-[16px] leading-relaxed text-white/55 [animation-delay:140ms] sm:text-[17px]">
                   Structured intake, policy-driven approvals, purchase orders and an audit trail in one
                   system. ProcureFlow replaces email threads and spreadsheets with a path everyone can
                   see.
                 </p>
-                <div className="mt-8 flex flex-wrap items-center gap-3">
+                <div className="mt-8 flex flex-wrap items-center gap-3 animate-fade-up [animation-delay:210ms]">
                   <Link
                     href="/login"
                     className="group inline-flex h-11 items-center gap-3 bg-brand-500 px-5 text-[14px] font-medium text-white transition hover:bg-brand-400"
@@ -205,7 +205,7 @@ export default function LandingPage() {
                     See how it works
                   </a>
                 </div>
-                <div className="mt-10 flex flex-wrap gap-x-7 gap-y-3 border-t border-white/10 pt-4 font-mono text-[10px] uppercase tracking-[0.14em] text-white/35">
+                <div className="mt-10 flex animate-fade-up flex-wrap gap-x-7 gap-y-3 border-t border-white/10 pt-4 font-mono text-[10px] uppercase tracking-[0.14em] text-white/35 [animation-delay:280ms]">
                   <span className="inline-flex items-center gap-2">
                     <Check className="h-3 w-3 text-brand-400" /> Policy checked
                   </span>
@@ -218,12 +218,12 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              <div className="animate-fade-up xl:pl-4">
+              <div className="animate-fade-up lg:pl-4 [animation-delay:180ms]">
                 <HeroRequestPanel />
               </div>
             </div>
 
-            <div className="mt-14 grid grid-cols-2 border-t border-white/10 sm:grid-cols-3 lg:grid-cols-5">
+            <div className="mt-14 grid grid-cols-2 border-t border-white/10 sm:grid-cols-3 lg:grid-cols-5" data-reveal>
               {FLOW.map(([number, label, copy]) => (
                 <div key={number} className="border-b border-white/10 py-4 sm:border-b-0 lg:border-r lg:last:border-r-0 lg:pl-4 lg:first:pl-0">
                   <div className="flex items-center gap-2">
@@ -241,7 +241,7 @@ export default function LandingPage() {
         {/* Proof */}
         <section className="bg-paper text-ink-900">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]">
+            <div className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]" data-reveal>
               <SectionLabel>Proof</SectionLabel>
               <div>
                 <h2 className="max-w-4xl text-[clamp(2.6rem,4.6vw,3.9rem)] font-medium leading-[1.02] tracking-[-0.045em]">
@@ -262,9 +262,15 @@ export default function LandingPage() {
               ].map(([stat, label, copy], index) => (
                 <div
                   key={label}
+                  data-reveal
+                  style={{ transitionDelay: `${index * 90}ms` }}
                   className={`py-7 md:px-7 ${index > 0 ? "border-t border-ink-900/10 md:border-l md:border-t-0" : ""} ${index === 0 ? "md:pl-0" : ""}`}
                 >
-                  <p className="text-[clamp(3.6rem,6vw,5rem)] font-medium leading-none tracking-[-0.06em]">
+                  <p
+                    data-count={index === 0 ? 3 : index === 1 ? 100 : 0}
+                    data-suffix={index === 0 ? "×" : index === 1 ? "%" : ""}
+                    className="text-[clamp(3.6rem,6vw,5rem)] font-medium leading-none tracking-[-0.06em] tabular-nums"
+                  >
                     {stat}
                   </p>
                   <p className="mt-4 text-[14px] font-medium text-ink-900">{label}</p>
@@ -273,7 +279,7 @@ export default function LandingPage() {
               ))}
             </div>
 
-            <div className="mt-6 flex flex-wrap items-center justify-between gap-4">
+            <div className="mt-6 flex flex-wrap items-center justify-between gap-4" data-reveal>
               <div className="flex flex-wrap gap-2">
                 {["Audit-ready", "Role-based access", "Configurable policy", "ERP handoff"].map((badge) => (
                   <span
@@ -296,13 +302,13 @@ export default function LandingPage() {
           </div>
         </section>
 
-        {/* Principles */}
-        <section id="platform" className="bg-ink-900 text-white">
+        {/* Platform */}
+        <section id="platform" className="scroll-mt-16 bg-ink-900 text-white">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="border-t border-white/10 pt-5">
+            <div className="border-t border-white/10 pt-5" data-reveal>
               <SectionLabel light>Platform</SectionLabel>
             </div>
-            <h2 className="mx-auto mt-8 max-w-5xl text-center text-[clamp(2.7rem,5vw,4.4rem)] font-medium leading-[1.0] tracking-[-0.05em]">
+            <h2 className="mx-auto mt-8 max-w-5xl text-center text-[clamp(2.7rem,5vw,4.4rem)] font-medium leading-[1.0] tracking-[-0.05em]" data-reveal>
               Composable. Accountable. Auditable.
             </h2>
             <div className="mt-16 grid border-t border-white/10 md:grid-cols-3">
@@ -328,6 +334,8 @@ export default function LandingPage() {
               ].map((item, index) => (
                 <div
                   key={item.title}
+                  data-reveal
+                  style={{ transitionDelay: `${index * 90}ms` }}
                   className={`py-9 md:px-9 ${index > 0 ? "border-t border-white/10 md:border-l md:border-t-0" : "md:pl-0"}`}
                 >
                   <div className="h-[90px]">
@@ -346,9 +354,9 @@ export default function LandingPage() {
         </section>
 
         {/* Workflow */}
-        <section id="workflow" className="bg-paper text-ink-900">
+        <section id="workflow" className="scroll-mt-16 bg-paper text-ink-900">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]">
+            <div className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]" data-reveal>
               <SectionLabel>Workflow</SectionLabel>
               <div>
                 <h2 className="max-w-4xl text-[clamp(2.6rem,4.8vw,4.05rem)] font-medium leading-[1.0] tracking-[-0.05em]">
@@ -362,13 +370,13 @@ export default function LandingPage() {
               </div>
             </div>
 
-            <div className="mt-14 grid border-t border-ink-900/10 md:grid-cols-5">
+            <div className="workflow-rail relative mt-14 grid border-t border-ink-900/10 md:grid-cols-5" data-reveal>
               {STEPS.map((step, index) => (
                 <div
                   key={step.label}
                   className={`relative py-6 md:px-5 ${index > 0 ? "border-t border-ink-900/10 md:border-l md:border-t-0" : "md:pl-0"}`}
                 >
-                  <span className="absolute -top-[5px] left-0 h-[9px] w-[9px] border border-ink-900/20 bg-paper md:left-5" />
+                  <span className="absolute -top-[5px] left-0 h-[9px] w-[9px] border border-brand-600 bg-paper md:left-5" />
                   <span className="font-mono text-[9px] tracking-[0.16em] text-ink-900/35">
                     {String(index + 1).padStart(2, "0")}
                   </span>
@@ -382,7 +390,7 @@ export default function LandingPage() {
             </div>
 
             <div className="mt-14 grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="border border-ink-900/15 bg-white p-5 sm:p-6">
+              <div className="min-w-0 border border-ink-900/15 bg-white p-5 sm:p-6" data-reveal>
                 <div className="flex items-center justify-between border-b border-ink-900/10 pb-3">
                   <div className="flex items-center gap-2">
                     <FileCheck2 className="h-4 w-4 text-brand-600" />
@@ -400,14 +408,14 @@ export default function LandingPage() {
                   <p className="font-mono text-[14px] font-medium">$2,900.00</p>
                 </div>
                 <div className="mt-4 overflow-hidden border border-ink-900/10">
-                  <div className="grid grid-cols-[1fr_44px_90px_90px] bg-ink-900/[0.025] px-3 py-2 font-mono text-[8px] uppercase tracking-[0.12em] text-ink-900/35">
+                  <div className="grid grid-cols-[minmax(0,1fr)_28px_64px_70px] bg-ink-900/[0.025] px-3 py-2 font-mono text-[8px] uppercase tracking-[0.12em] text-ink-900/35 sm:grid-cols-[1fr_44px_90px_90px]">
                     <span>Description</span>
                     <span className="text-right">Qty</span>
                     <span className="text-right">Unit</span>
                     <span className="text-right">Total</span>
                   </div>
-                  <div className="grid grid-cols-[1fr_44px_90px_90px] border-t border-ink-900/10 px-3 py-3 text-[11px]">
-                    <span className="truncate pr-2">14&quot; developer laptop, 32GB RAM</span>
+                  <div className="grid grid-cols-[minmax(0,1fr)_28px_64px_70px] border-t border-ink-900/10 px-3 py-3 text-[11px] sm:grid-cols-[1fr_44px_90px_90px]">
+                    <span className="min-w-0 truncate pr-2">14&quot; developer laptop, 32GB RAM</span>
                     <span className="text-right font-mono">2</span>
                     <span className="text-right font-mono">$1,450.00</span>
                     <span className="text-right font-mono">$2,900.00</span>
@@ -433,7 +441,7 @@ export default function LandingPage() {
                 </div>
               </div>
 
-              <div className="border border-ink-900/15 bg-white p-5 sm:p-6">
+              <div className="min-w-0 border border-ink-900/15 bg-white p-5 sm:p-6" data-reveal style={{ transitionDelay: "90ms" }}>
                 <div className="flex items-center justify-between border-b border-ink-900/10 pb-3">
                   <div className="flex items-center gap-2">
                     <GitBranch className="h-4 w-4 text-brand-600" />
@@ -474,9 +482,9 @@ export default function LandingPage() {
         </section>
 
         {/* Controls */}
-        <section id="controls" className="bg-brand-500 text-white">
+        <section id="controls" className="scroll-mt-16 bg-brand-500 text-white">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="grid gap-8 border-t border-white/25 pt-5 md:grid-cols-[160px_1fr]">
+            <div className="grid gap-8 border-t border-white/25 pt-5 md:grid-cols-[160px_1fr]" data-reveal>
               <SectionLabel light>Controls</SectionLabel>
               <div>
                 <h2 className="max-w-4xl text-[clamp(2.6rem,4.8vw,4.05rem)] font-medium leading-[1.0] tracking-[-0.05em]">
@@ -490,7 +498,7 @@ export default function LandingPage() {
             </div>
 
             <div className="mt-14 grid gap-8 lg:grid-cols-[0.95fr_1.05fr]">
-              <div className="border border-white/25 bg-ink-900 p-5 font-mono text-[11px] leading-relaxed shadow-[0_24px_80px_-30px_rgba(0,0,0,0.6)] sm:p-6">
+              <div className="border border-white/25 bg-ink-900 p-5 font-mono text-[11px] leading-relaxed shadow-[0_24px_80px_-30px_rgba(0,0,0,0.6)] sm:p-6" data-reveal>
                 <div className="flex items-center justify-between border-b border-white/10 pb-3">
                   <span className="text-[9px] uppercase tracking-[0.16em] text-white/35">policy / standard.yaml</span>
                   <span className="text-[9px] text-brand-300">active</span>
@@ -518,8 +526,13 @@ rule "high_risk_vendor"
               </div>
 
               <div className="grid gap-x-8 gap-y-5 sm:grid-cols-2">
-                {CONTROLS.map(([title, copy]) => (
-                  <div key={title} className="border-t border-white/25 pt-4">
+                {CONTROLS.map(([title, copy], index) => (
+                  <div
+                    key={title}
+                    data-reveal
+                    style={{ transitionDelay: `${index * 60}ms` }}
+                    className="border-t border-white/25 pt-4"
+                  >
                     <p className="text-[13px] font-medium">{title}</p>
                     <p className="mt-1.5 text-[12px] leading-relaxed text-white/60">{copy}</p>
                   </div>
@@ -530,12 +543,12 @@ rule "high_risk_vendor"
         </section>
 
         {/* Teams */}
-        <section className="bg-ink-900 text-white">
+        <section id="use-cases" className="scroll-mt-16 bg-ink-900 text-white">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="border-t border-white/10 pt-5">
+            <div className="border-t border-white/10 pt-5" data-reveal>
               <SectionLabel light>Use cases</SectionLabel>
             </div>
-            <div className="mt-8 flex flex-col justify-between gap-6 md:flex-row md:items-end">
+            <div className="mt-8 flex flex-col justify-between gap-6 md:flex-row md:items-end" data-reveal>
               <h2 className="max-w-4xl text-[clamp(2.6rem,4.8vw,4.05rem)] font-medium leading-[1.0] tracking-[-0.05em]">
                 Every team. One workflow.
               </h2>
@@ -546,27 +559,32 @@ rule "high_risk_vendor"
             </div>
 
             <div className="mt-12 border-t border-white/10">
-              {TEAMS.map((team) => (
+              {TEAMS.map((team, index) => (
                 <a
                   key={team.name}
                   href="#workflow"
-                  className="group grid gap-3 border-b border-white/10 py-6 transition-colors hover:bg-white/[0.025] md:grid-cols-[1.1fr_1fr_1fr_170px_24px] md:items-center md:gap-8"
+                  data-reveal
+                  style={{ transitionDelay: `${Math.min(index, 4) * 55}ms` }}
+                  className="group grid grid-cols-[1fr_auto] gap-x-4 gap-y-3 border-b border-white/10 py-6 transition-colors hover:bg-white/[0.025] md:grid-cols-[1.1fr_1fr_1fr_160px] md:items-center md:gap-6"
                 >
-                  <h3 className="text-[26px] font-medium tracking-[-0.035em] text-white/90">{team.name}</h3>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-white/40">
+                  <h3 className="text-[24px] font-medium tracking-[-0.035em] text-white/90 sm:text-[26px]">{team.name}</h3>
+                  <ArrowUpRight className="col-start-2 row-start-1 h-4 w-4 text-white/25 transition group-hover:text-brand-400 md:hidden" />
+                  <div className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-white/40 md:col-span-1">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="h-1 w-1 bg-brand-500" />
                       {team.inputs}
                     </span>
                   </div>
-                  <div className="flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-white/40">
+                  <div className="col-span-2 flex flex-wrap gap-x-4 gap-y-1 font-mono text-[10px] text-white/40 md:col-span-1">
                     <span className="inline-flex items-center gap-1.5">
                       <span className="h-1 w-1 bg-brand-500" />
                       {team.policy}
                     </span>
                   </div>
-                  <span className="text-[11px] text-white/35">{team.outcome}</span>
-                  <ArrowUpRight className="h-4 w-4 text-white/25 transition group-hover:text-brand-400" />
+                  <div className="col-span-2 flex items-center justify-between gap-4 md:col-span-1">
+                    <span className="text-[11px] text-white/35">{team.outcome}</span>
+                    <ArrowUpRight className="hidden h-4 w-4 shrink-0 text-white/25 transition group-hover:text-brand-400 md:block" />
+                  </div>
                 </a>
               ))}
             </div>
@@ -574,9 +592,9 @@ rule "high_risk_vendor"
         </section>
 
         {/* Security */}
-        <section id="security" className="bg-paper text-ink-900">
+        <section id="security" className="scroll-mt-16 bg-paper text-ink-900">
           <div className="mx-auto max-w-[1320px] px-5 py-20 sm:px-8 sm:py-24">
-            <div className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]">
+            <div className="grid gap-8 border-t border-ink-900/10 pt-5 md:grid-cols-[160px_1fr]" data-reveal>
               <SectionLabel>Security</SectionLabel>
               <div>
                 <h2 className="max-w-4xl text-[clamp(2.6rem,4.8vw,4.05rem)] font-medium leading-[1.0] tracking-[-0.05em]">
@@ -589,11 +607,13 @@ rule "high_risk_vendor"
               </div>
             </div>
 
-            <div className="mt-14 grid border-t border-ink-900/10 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-14 grid border-l border-t border-ink-900/10 sm:grid-cols-2 lg:grid-cols-3">
               {SECURITY.map(([title, copy], index) => (
                 <div
                   key={title}
-                  className={`py-6 sm:px-6 ${index >= 3 ? "border-t border-ink-900/10" : ""} ${index % 3 !== 0 ? "lg:border-l lg:border-ink-900/10" : "lg:pl-0"} ${index % 2 !== 0 ? "sm:border-l sm:border-ink-900/10" : "sm:pl-0"} ${index >= 2 ? "sm:border-t sm:border-ink-900/10" : ""}`}
+                  data-reveal
+                  style={{ transitionDelay: `${(index % 3) * 70}ms` }}
+                  className="border-b border-r border-ink-900/10 p-5 sm:p-6"
                 >
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-brand-600" />
@@ -604,7 +624,7 @@ rule "high_risk_vendor"
               ))}
             </div>
 
-            <div className="mt-10 grid gap-4 border border-ink-900/10 bg-white p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6">
+            <div className="mt-10 grid gap-4 border border-ink-900/10 bg-white p-5 sm:grid-cols-[auto_1fr_auto] sm:items-center sm:gap-6" data-reveal>
               <div className="flex h-10 w-10 items-center justify-center bg-ink-900">
                 <Fingerprint className="h-5 w-5 text-white" />
               </div>
@@ -626,10 +646,10 @@ rule "high_risk_vendor"
           <div className="pointer-events-none absolute inset-0 landing-grid opacity-60" />
           <div className="pointer-events-none absolute bottom-0 left-1/2 h-[420px] w-[760px] -translate-x-1/2 bg-[radial-gradient(closest-side,rgba(47,109,246,0.22),transparent)]" />
           <div className="relative mx-auto max-w-[1320px] px-5 py-24 sm:px-8 sm:py-28">
-            <div className="border-t border-white/10 pt-5">
+            <div className="border-t border-white/10 pt-5" data-reveal>
               <SectionLabel light>Get started</SectionLabel>
             </div>
-            <div className="mt-10 flex flex-col justify-between gap-10 lg:flex-row lg:items-end">
+            <div className="mt-10 flex flex-col justify-between gap-10 lg:flex-row lg:items-end" data-reveal>
               <div>
                 <h2 className="max-w-3xl text-[clamp(3rem,5.6vw,5rem)] font-medium leading-[0.96] tracking-[-0.055em]">
                   Put procurement
@@ -658,7 +678,7 @@ rule "high_risk_vendor"
               </div>
             </div>
 
-            <div className="mt-16 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-3">
+            <div className="mt-16 grid gap-3 border-t border-white/10 pt-5 sm:grid-cols-3" data-reveal>
               {[
                 [Timer, "Approvals with SLAs", "Timers and escalation are part of the workflow."],
                 [ReceiptText, "POs with references", "Every PO gets a number and an ERP handoff."],
@@ -682,8 +702,8 @@ rule "high_risk_vendor"
 
       <footer className="border-t border-white/10 bg-ink-900 text-white">
         <div className="mx-auto max-w-[1320px] px-5 py-14 sm:px-8">
-          <div className="grid gap-10 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
-            <div>
+          <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr]">
+            <div className="sm:col-span-2 lg:col-span-1">
               <Logo tone="dark" />
               <p className="mt-4 max-w-xs text-[12px] leading-relaxed text-white/40">
                 Procurement orchestration for teams that need every purchase to move — and every
@@ -699,7 +719,7 @@ rule "high_risk_vendor"
             </div>
             {[
               ["Platform", [["Workflow", "#workflow"], ["Controls", "#controls"], ["Security", "#security"], ["Open app", "/login"]]],
-              ["Company", [["Overview", "#platform"], ["Use cases", "#workflow"], ["Demo", "/login"], ["Health", "/api/health"]]],
+              ["Company", [["Overview", "#platform"], ["Use cases", "#use-cases"], ["Demo", "/login"], ["Health", "/api/health"]]],
               ["Resources", [["Documentation", "/login"], ["Request access", "/login"], ["Sign in", "/login"], ["Status", "/api/health"]]],
             ].map(([title, links]) => (
               <div key={title as string}>
