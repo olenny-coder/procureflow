@@ -547,9 +547,13 @@ the Postgres service, so Coolify had no non-database service to attach a domain 
      (`requester@procureflow.dev` / `Demo1234!`), then `false` and change the users.
      It is `false` by default for a real deployment.
 4. Deploy. The web container runs `pnpm db:migrate` before `next start`.
-5. Assign the domain to the **`web`** service on container port **3000**.
-   Do not assign domains to `postgres`, `engine`, or `worker`.
-6. Set `APP_URL` to the assigned domain and redeploy if it was not known up front.
+5. Assign the domain to the **`web`** service and set the internal port to **3000**.
+   In Coolify's domain field, use `https://your-domain:3000`, or set **Port** to
+   `3000` explicitly. The `:3000` is the internal container port; normal visitors
+   still use HTTPS on port 443. Do not assign domains to `postgres`, `engine`, or `worker`.
+6. Set `APP_URL` to the assigned public domain **without** `:3000`
+   (for example `https://procureflow.example.com`) and redeploy if it was not
+   known up front.
 
 `AUTH_SECRET` and `INTERNAL_API_TOKEN` are not required during `docker compose build`.
 If omitted at runtime, the web entrypoint generates strong values on first boot and
@@ -561,9 +565,9 @@ reported separately at `/api/health`.
 Local production-mode test:
 
 ```bash
-docker compose up -d --build
-docker compose ps
-# open the host port mapped to web:3000
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.dev.yml ps
+# open http://localhost:3000
 ```
 
 For local Postgres-only development, keep using the dev override:

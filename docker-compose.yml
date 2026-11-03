@@ -52,7 +52,7 @@ services:
       dockerfile: Dockerfile
       target: web
     restart: unless-stopped
-    ports:
+    expose:
       - "3000"
     depends_on:
       postgres:
