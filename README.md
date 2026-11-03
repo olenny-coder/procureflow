@@ -186,7 +186,7 @@ VENDOR_MODIFICATIONS.md   Every local engine change
 | --- | --- | --- |
 | Node.js | 20+ (tested on 24) | Next.js 14, workflow SDK |
 | pnpm | 10+ | `corepack enable` |
-| Docker | optional if Postgres is already running | `docker compose up -d postgres` |
+| Docker | optional if Postgres is already running | `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres` |
 | Go | 1.27+ | Only for the reworked engine build |
 | engine CLI | auto-downloaded | Used by `pnpm dev:stock-engine` |
 
@@ -201,7 +201,7 @@ cp .env.example .env
 
 ```bash
 pnpm install
-docker compose up -d postgres
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
 ```
 
 ### 3. Create schema and demo data
@@ -519,6 +519,57 @@ CI (`.github/workflows/ci.yml`):
 
 ---
 
+## Docker / Coolify deployment
+
+The default `docker-compose.yml` is a deployable application stack, not a
+database-only file. It contains four services:
+
+| Service | Type | Purpose |
+| --- | --- | --- |
+| `web` | Application (built from `Dockerfile`) | Next.js UI + API; assign the public domain and port 3000 |
+| `worker` | Application (built from `Dockerfile`) | Durable workflow worker; no public domain |
+| `engine` | Internal service | Workflow engine (stock auto-setup image) on `engine:7233` |
+| `postgres` | Database | PostgreSQL 16 with a persistent volume |
+
+This is why the old Coolify error appeared: the previous compose file exposed only
+the Postgres service, so Coolify had no non-database service to attach a domain to.
+
+### Coolify steps
+
+1. Create a **Docker Compose** resource from this repository.
+2. Use `/docker-compose.yml` as the compose file and branch `main`.
+3. Add these environment variables in Coolify:
+   - `AUTH_SECRET` — `openssl rand -base64 32`
+   - `INTERNAL_API_TOKEN` — another long random value
+   - `POSTGRES_PASSWORD` — a long URL-safe password
+   - `APP_URL` — the final public URL, e.g. `https://procureflow.example.com`
+   - `SEED_DEMO_DATA` — `true` on the **first** deployment if you want the demo users
+     (`requester@procureflow.dev` / `Demo1234!`), then `false` and change the users.
+     It is `false` by default for a real deployment.
+4. Deploy. The web container runs `pnpm db:migrate` before `next start`.
+5. Assign the domain to the **`web`** service on container port **3000**.
+   Do not assign domains to `postgres`, `engine`, or `worker`.
+6. Set `APP_URL` to the assigned domain and redeploy if it was not known up front.
+
+Local production-mode test:
+
+```bash
+docker compose up -d --build
+docker compose ps
+# open the host port mapped to web:3000
+```
+
+For local Postgres-only development, keep using the dev override:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres
+```
+
+`coolify.env.example` lists the required values. Never commit a filled-in copy.
+The Postgres, engine, and runtime data volumes persist across container restarts.
+
+---
+
 ## Render + Neon deployment
 
 ### Neon
@@ -620,7 +671,8 @@ Never commit `.env` or real secrets. `.env.example` contains local-only placehol
 ## Troubleshooting
 
 **`Error: connect ECONNREFUSED 127.0.0.1:5432`** — start Postgres
-(`docker compose up -d postgres`) or fix `DATABASE_URL`.
+(`docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d postgres`)
+or fix `DATABASE_URL`.
 
 **`Cannot find module '@procureflow/...'`** — run `pnpm install` at the repo root
 (workspace packages are linked through pnpm).

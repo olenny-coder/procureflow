@@ -1,0 +1,17 @@
+**/node_modules
+**/.next
+**/.turbo
+.git
+.github
+.tools
+.data
+.engine
+.temporal
+third_party
+docs
+tests
+*.log
+.env
+.env.*
+!.env.example
+coolify.env

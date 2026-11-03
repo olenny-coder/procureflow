@@ -1,21 +1,103 @@
 services:
   postgres:
     image: postgres:16-alpine
-    container_name: procureflow-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: procureflow
-      POSTGRES_PASSWORD: procureflow
-      POSTGRES_DB: procureflow
-    ports:
-      - "5433:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-procureflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-procureflow}
+      POSTGRES_DB: ${POSTGRES_DB:-procureflow}
     volumes:
       - procureflow_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U procureflow -d procureflow"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-procureflow} -d ${POSTGRES_DB:-procureflow}"]
       interval: 5s
       timeout: 5s
+      retries: 12
+
+  engine:
+    image: temporalio/auto-setup:1.25.2
+    restart: unless-stopped
+    environment:
+      DB: postgres12
+      DB_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-procureflow}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:-procureflow}
+      POSTGRES_SEEDS: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: web
+    restart: unless-stopped
+    ports:
+      - "3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      engine:
+        condition: service_started
+    environment: &app-environment
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: postgresql://${POSTGRES_USER:-procureflow}:${POSTGRES_PASSWORD:-procureflow}@postgres:5432/${POSTGRES_DB:-procureflow}
+      DIRECT_URL: postgresql://${POSTGRES_USER:-procureflow}:${POSTGRES_PASSWORD:-procureflow}@postgres:5432/${POSTGRES_DB:-procureflow}
+      DATABASE_SSL: "false"
+      DATABASE_POOLED: "false"
+      AUTH_SECRET: ${AUTH_SECRET:?Set AUTH_SECRET}
+      AUTH_URL: ${APP_URL:-http://localhost:3000}
+      NEXTAUTH_URL: ${APP_URL:-http://localhost:3000}
+      AUTH_TRUST_HOST: "true"
+      WORKFLOW_ENGINE_ADDRESS: engine:7233
+      WORKFLOW_ENGINE_NAMESPACE: default
+      WORKFLOW_ENGINE_TASK_QUEUE: procureflow
+      WORKFLOW_ENGINE_TLS: "false"
+      WORKFLOW_ENGINE_SEARCH_ATTRIBUTES: "false"
+      INTERNAL_API_TOKEN: ${INTERNAL_API_TOKEN:?Set INTERNAL_API_TOKEN}
+      SEED_DEMO_DATA: ${SEED_DEMO_DATA:-false}
+      EMAIL_ADAPTER: console
+      EMAIL_FROM: ${EMAIL_FROM:-procureflow@example.com}
+      ERP_ADAPTER: csv
+      ERP_CSV_DIR: .data/erp
+      STORAGE_ADAPTER: local
+      STORAGE_DIR: .data/storage
+      AI_RISK_SUMMARY_ENABLED: "true"
+    volumes:
+      - procureflow_runtime:/app/.data
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\"",
+        ]
+      interval: 15s
+      timeout: 5s
       retries: 10
+      start_period: 90s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: worker
+    restart: unless-stopped
+    depends_on:
+      web:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+      engine:
+        condition: service_started
+    environment:
+      <<: *app-environment
+      PORT: "3001"
+      SEED_DEMO_DATA: "false"
+    volumes:
+      - procureflow_runtime:/app/.data
 
 volumes:
   procureflow_pgdata:
+  procureflow_runtime:

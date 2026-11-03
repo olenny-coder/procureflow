@@ -82,7 +82,16 @@ async function ensurePostgres() {
     return;
   }
   log("Postgres is not running; starting docker compose service 'postgres'");
-  const exit = await shell("docker", ["compose", "up", "-d", "postgres"]);
+  const exit = await shell("docker", [
+    "compose",
+    "-f",
+    "docker-compose.yml",
+    "-f",
+    "docker-compose.dev.yml",
+    "up",
+    "-d",
+    "postgres",
+  ]);
   if (exit !== 0) {
     throw new Error(
       "Could not start Postgres. Start Docker Desktop (or Postgres) and retry, or set DATABASE_URL to a running database.",
