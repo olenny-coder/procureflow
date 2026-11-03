@@ -31,6 +31,10 @@ approval, and every action is attributed in an audit trail.
 | --- | --- |
 | ![Login](docs/screenshots/login.png) | ![Dashboard](docs/screenshots/dashboard.png) |
 
+| Mobile landing | Mobile security |
+| --- | --- |
+| ![Mobile landing](docs/screenshots/landing-mobile.png) | ![Mobile security](docs/screenshots/security-mobile.png) |
+
 ![Vendor directory with onboarding status, risk and compliance workflow actions](docs/screenshots/vendors.png)
 
 ---
