@@ -718,8 +718,6 @@ Never commit `.env` or real secrets. `.env.example` contains local-only placehol
   on. The PostgreSQL read model is the source of truth for lists/dashboards.
 - **CSV ERP sync** writes one file per PO; a failed sync marks the PO FAILED and
   leaves it issued, retryable by finance/ops.
-- **No GitHub repository is created automatically** (no `gh` credentials in the
-  build environment). See the commands below.
 
 ---
 
@@ -753,6 +751,50 @@ reachable; the DB read model still renders. Check `/api/health` and the worker l
 processes, or the browser clock/cookie domain differs. Restart web/worker with the
 same `.env`.
 
+**A different app answers on `localhost:3000`** — a stale local/WSL Next server can
+hold loopback port 3000 while Docker publishes on another interface. The page may
+look like ProcureFlow but use a different database, so login fails and the Docker
+logs show no auth request.
+
+Check the listener and WSL:
+
+```bash
+netstat -ano | findstr :3000
+wsl --list --running
+```
+
+Stop the old dev server, or run the Docker stack on another host port:
+
+```bash
+WEB_PORT=3001 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate web
+```
+
+Then open **http://localhost:3001**. The dev override automatically points
+`APP_URL`, `AUTH_URL`, and `NEXTAUTH_URL` at `WEB_PORT`.
+
+**Demo accounts cannot sign in** — the login page exists, but the seed has not run
+or the browser is using a different hostname than `AUTH_URL`. Demo users are created
+only by `pnpm db:seed`.
+
+For Docker:
+
+```bash
+docker compose exec web pnpm db:seed
+docker compose exec postgres psql -U procureflow -d procureflow \
+  -c 'select email, role, active from users;'
+```
+
+For the local dev override, `SEED_DEMO_DATA` is already enabled:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --force-recreate web
+```
+
+Use **http://localhost:3000** consistently. If `APP_URL` is a public HTTPS domain,
+Auth.js may issue secure cookies that the browser will not send to `localhost`.
+Set `APP_URL=http://localhost:3000`, `AUTH_URL=http://localhost:3000`, and
+`NEXTAUTH_URL=http://localhost:3000` for local testing.
+
 **Stock engine workflow tests download slowly the first time** — the test harness
 caches the test server under the OS temp directory. Subsequent runs are fast.
 
@@ -760,23 +802,16 @@ caches the test server under the OS temp directory. Subsequent runs are fast.
 
 ## GitHub
 
-The repository is git-initialized. To publish:
+Published at <https://github.com/olenny-coder/procureflow> (public).
 
 ```bash
-gh repo create procureflow --private --source=. --remote=origin --push
-```
-
-If `gh` is unavailable, create an empty GitHub repository and run:
-
-```bash
-git remote add origin git@github.com:<you>/procureflow.git
-git branch -M main
-git push -u origin main
+git remote -v
+git push origin main
 git push --tags   # publish vendor-base-96a50b1 for the CI provenance guard
 ```
 
 Add repository secrets for Render, Neon and your engine endpoint; never commit them.
-CI runs on push and pull requests once the repo is on GitHub.
+CI runs on push and pull requests.
 
 ## License
 
