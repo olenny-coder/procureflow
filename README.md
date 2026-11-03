@@ -551,9 +551,17 @@ the Postgres service, so Coolify had no non-database service to attach a domain 
    In Coolify's domain field, use `https://your-domain:3000`, or set **Port** to
    `3000` explicitly. The `:3000` is the internal container port; normal visitors
    still use HTTPS on port 443. Do not assign domains to `postgres`, `engine`, or `worker`.
+   Do **not** use `127.0.0.1` as the domain; that points the browser at its own
+   machine and cannot receive a TLS certificate.
 6. Set `APP_URL` to the assigned public domain **without** `:3000`
    (for example `https://procureflow.example.com`) and redeploy if it was not
    known up front.
+
+The `web` service publishes container port `3000` for Coolify's proxy/health
+checks as well as direct testing. A temporary `http://SERVER_PUBLIC_IP:3000`
+check will show “not secure” because it bypasses HTTPS; use a real DNS name for
+TLS. A `502 Bad Gateway` means the proxy cannot reach the web container — verify
+the domain is pointing at the Coolify server and the `web` service is healthy.
 
 `AUTH_SECRET` and `INTERNAL_API_TOKEN` are not required during `docker compose build`.
 If omitted at runtime, the web entrypoint generates strong values on first boot and
