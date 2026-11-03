@@ -17,10 +17,11 @@ jobs:
     name: Install, lint, typecheck, unit tests, build
     runs-on: ubuntu-24.04
     steps:
-      - name: Checkout (full history for vendor diff)
+      - name: Checkout (full history + tags for vendor diff)
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          fetch-tags: true
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
