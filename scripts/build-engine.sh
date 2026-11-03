@@ -10,7 +10,7 @@ SRC="$ROOT/third_party/temporal"
 OUT="$SRC/.build/bin"
 
 if [[ ! -f "$SRC/go.mod" ]]; then
-  echo "third_party/temporal not found. Restore the vendored Temporal tree first." >&2
+  echo "third_party/temporal not found. Restore the vendored engine tree first." >&2
   exit 1
 fi
 
@@ -24,10 +24,10 @@ mkdir -p "$OUT"
 export CGO_ENABLED=0
 export GOTOOLCHAIN="${GOTOOLCHAIN:-auto}"
 
-echo "==> building Temporal server from $SRC"
+echo "==> building engine server from $SRC"
 (cd "$SRC" && "$GO" build -trimpath -ldflags "-s -w" -o "$OUT/engine-server" ./cmd/server)
 
-echo "==> building ProcureFlow Temporal bootstrap"
+echo "==> building ProcureFlow engine bootstrap"
 (cd "$SRC" && "$GO" build -trimpath -ldflags "-s -w" -o "$OUT/procureflow-bootstrap" ./cmd/tools/procureflow-bootstrap)
 
 echo "==> built:"

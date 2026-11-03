@@ -1,5 +1,12 @@
 # ProcureFlow
 
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="apps/web/public/brand/logo-light.svg">
+    <img src="apps/web/public/brand/logo.svg" width="300" alt="ProcureFlow">
+  </picture>
+</p>
+
 **Procurement orchestration with durable workflows.** Intake → policy evaluation →
 configurable approvals → purchase order → append-only audit, built as a
 production-lean MVP.
