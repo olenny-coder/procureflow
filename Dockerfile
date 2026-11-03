@@ -31,8 +31,9 @@ RUN pnpm --filter @procureflow/web build
 FROM base AS web
 ENV NODE_ENV=production
 COPY --from=build /app ./
+COPY docker/web-entrypoint.sh /usr/local/bin/web-entrypoint.sh
 EXPOSE 3000
-CMD ["sh", "-c", "set -eu; : \"${AUTH_SECRET:?AUTH_SECRET is required at runtime}\"; : \"${INTERNAL_API_TOKEN:?INTERNAL_API_TOKEN is required at runtime}\"; pnpm db:migrate && if [ \"${SEED_DEMO_DATA:-false}\" = \"true\" ]; then pnpm db:seed; fi && pnpm --filter @procureflow/web start"]
+CMD ["sh", "/usr/local/bin/web-entrypoint.sh"]
 
 FROM base AS worker
 ENV NODE_ENV=production

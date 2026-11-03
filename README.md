@@ -538,11 +538,11 @@ the Postgres service, so Coolify had no non-database service to attach a domain 
 
 1. Create a **Docker Compose** resource from this repository.
 2. Use `/docker-compose.yml` as the compose file and branch `main`.
-3. Add these environment variables in Coolify:
-   - `AUTH_SECRET` — `openssl rand -base64 32`
-   - `INTERNAL_API_TOKEN` — another long random value
-   - `POSTGRES_PASSWORD` — a long URL-safe password
+3. Set these environment variables in Coolify:
    - `APP_URL` — the final public URL, e.g. `https://procureflow.example.com`
+   - `POSTGRES_PASSWORD` — recommended; use a long URL-safe password
+   - `AUTH_SECRET` — optional but recommended for explicit control
+   - `INTERNAL_API_TOKEN` — optional but recommended for explicit control
    - `SEED_DEMO_DATA` — `true` on the **first** deployment if you want the demo users
      (`requester@procureflow.dev` / `Demo1234!`), then `false` and change the users.
      It is `false` by default for a real deployment.
@@ -551,10 +551,12 @@ the Postgres service, so Coolify had no non-database service to attach a domain 
    Do not assign domains to `postgres`, `engine`, or `worker`.
 6. Set `APP_URL` to the assigned domain and redeploy if it was not known up front.
 
-Secrets are **runtime variables**; they do not need to be marked as build variables
-in Coolify. Compose builds without them and the web container validates them at
-startup, so a missing secret produces a clear runtime error instead of a failed
-Docker build.
+`AUTH_SECRET` and `INTERNAL_API_TOKEN` are not required during `docker compose build`.
+If omitted at runtime, the web entrypoint generates strong values on first boot and
+persists them in the `procureflow_runtime` volume, so sessions survive restarts.
+Set them explicitly if you run multiple web replicas. The Coolify health check only
+verifies that the web server is serving `/login`; full DB and engine readiness is
+reported separately at `/api/health`.
 
 Local production-mode test:
 
