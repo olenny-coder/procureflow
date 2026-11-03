@@ -23,6 +23,34 @@ approval, and every action is attributed in an audit trail.
 - Real adapter boundaries for email, Slack, ERP, storage and AI risk summaries.
 - Runnable on Render + Neon with an external workflow engine endpoint.
 
+## What ProcureFlow is for
+
+ProcureFlow is the control layer between a **purchase request** and a **purchase
+order**. It is for finance, IT, operations and admin teams that need every purchase
+to follow the same policy, reach the right approver and leave an audit trail —
+without adopting a full ERP.
+
+**The job it does**
+
+- Gives employees one structured place to request hardware, software, services or supplies.
+- Applies a deterministic policy to choose the approval chain, SLA and PO path.
+- Holds approvals durably, so decisions survive restarts, deployments and long waits.
+- Issues a purchase order with an ERP reference after final approval.
+- Records every submission, decision and policy evaluation in an append-only audit trail.
+
+**Who it is for**
+
+- **Requesters** who need a clear status instead of chasing email threads.
+- **Managers and finance** who need consistent approvals and spend controls.
+- **IT and operations** who buy across many vendors and categories.
+- **Admins** who own policies, vendors and the audit record.
+
+**What it is not**
+
+ProcureFlow is not a vendor marketplace, an ERP general ledger, an expense
+reimbursement tool or a contract lifecycle suite. It is the focused workflow and
+control layer for the procurement decision itself.
+
 ## Product tour
 
 ![ProcureFlow landing page: every purchase, one clear path](docs/screenshots/landing.png)
