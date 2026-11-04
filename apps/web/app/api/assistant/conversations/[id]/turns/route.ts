@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { assertSameOrigin, handleApiError, json, readJson, requireApiUser } from "@/lib/api";
 import { assistantRequest } from "@/lib/assistant";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,7 @@ export async function POST(
   try {
     const user = await requireApiUser();
     assertSameOrigin(request);
+    enforceRateLimit(`assistant-turn:${user.id}`, 60, 60_000);
     const input = await readJson(request, turnSchema);
     const data = await assistantRequest(
       `/v1/conversations/${encodeURIComponent(params.id)}/turns`,
