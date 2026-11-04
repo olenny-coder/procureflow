@@ -94,6 +94,18 @@ def test_readback_is_required_before_slot_is_filled():
     assert repo.drafts == []
 
 
+def test_ambiguous_value_asks_for_clarification_without_writing():
+    repo, llm, orch, user = build()
+    started = orch.start(user)
+    outcome = run_tool(
+        orch, llm, started.conversation_id, user, "set_vendor", {"value": "maybe Acme"}
+    )
+    assert "do not want to guess" in outcome.assistant_message.lower()
+    assert "vendor" not in repo.get_slots(started.conversation_id)
+    assert repo.get_conversation(started.conversation_id)["state"] == "COLLECTING"
+    assert any(event["event_type"] == "CLARIFICATION_REQUESTED" for event in repo.audit)
+
+
 def test_full_intake_reaches_draft_only_after_confirm_and_guards():
     repo, llm, orch, user = build()
     started = orch.start(user)

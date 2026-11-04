@@ -538,7 +538,7 @@ error, so failures are visible and retryable. `POST /api/internal/outbox` starts
 ```bash
 pnpm test:unit       # policy engine + Zod schemas
 pnpm test:workflows  # workflow engine workflow integration tests (5 scenarios)
-pnpm assistant:test  # 15 deterministic assistant replay tests
+pnpm assistant:test  # 16 deterministic assistant replay tests
 pnpm typecheck
 pnpm lint
 pnpm build

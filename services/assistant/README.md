@@ -144,10 +144,11 @@ thresholds; validate on a held-out sample.
 pnpm assistant:test
 ```
 
-15 replay tests cover:
+16 replay tests cover:
 
 - initial visibility hides dependent slots;
 - readback is required before a slot is filled;
+- ambiguous values ask for clarification instead of guessing;
 - malformed tool calls hard-fail and write nothing;
 - unapproved vendors are escalated;
 - RBAC blocks finalization by non-requester roles;

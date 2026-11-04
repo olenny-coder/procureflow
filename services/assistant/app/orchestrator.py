@@ -107,6 +107,15 @@ class Orchestrator:
             conversation_id,
             str(turn["id"]),
             None,
+            "ASSISTANT_TURN",
+            {"content": message, "visibleTools": [], "nextSlots": ["vendor", "category"]},
+            self.settings.model_name,
+            self.settings.model_quantization,
+        )
+        self.repo.add_audit(
+            conversation_id,
+            str(turn["id"]),
+            None,
             "CONVERSATION_STARTED",
             {"visibleTools": [], "nextSlots": ["vendor", "category"]},
             self.settings.model_name,
@@ -250,13 +259,6 @@ class Orchestrator:
             )
             content = self._guard_claim(content, conversation, turn_id, user)
             self.repo.update_turn(turn_id, content)
-            self._audit(
-                conversation_id,
-                turn_id,
-                user["id"],
-                "ASSISTANT_TURN",
-                {"content": content, "confidence": score, "band": band},
-            )
             return self._outcome(conversation, content, confidence=score, band=band)
 
         call = result.tool_calls[0]
@@ -376,6 +378,26 @@ class Orchestrator:
         user_message: str,
     ) -> TurnOutcome:
         conversation_id = str(conversation["id"])
+        if isinstance(raw_value, str):
+            lowered = raw_value.strip().lower()
+            if any(
+                phrase in lowered
+                for phrase in ("maybe", "not sure", "something", "whatever", "unknown", "?")
+            ):
+                message = (
+                    "I do not want to guess. "
+                    + self._next_question(slots)
+                    + " You can give me the exact value, or ask for a policy lookup."
+                )
+                self.repo.update_turn(turn_id, message)
+                self._audit(
+                    conversation_id,
+                    turn_id,
+                    user["id"],
+                    "CLARIFICATION_REQUESTED",
+                    {"slot": slot, "rawValue": raw_value},
+                )
+                return self._outcome(conversation, message)
         value = normalize_value(slot, raw_value)
         row = dict(slots)
         row[slot] = {"status": "PENDING", "value": value}
@@ -903,8 +925,8 @@ class Orchestrator:
             str(conversation["id"]),
             turn_id,
             user["id"],
-            "ASSISTANT_TURN",
-            {"content": message, "topic": topic, "groundedResult": answer},
+            "GROUNDED_ANSWER",
+            {"topic": topic, "groundedResult": answer},
         )
         return self._outcome(conversation, message)
 
@@ -1131,7 +1153,7 @@ class Orchestrator:
         band: str | None = None,
     ) -> TurnOutcome:
         current = self.repo.get_conversation(str(conversation["id"])) or conversation
-        return TurnOutcome(
+        outcome = TurnOutcome(
             conversation_id=str(current["id"]),
             assistant_message=message,
             state=current.get("state", "COLLECTING"),
@@ -1142,3 +1164,19 @@ class Orchestrator:
             confidence=confidence,
             band=band,
         )
+        self._audit(
+            outcome.conversation_id,
+            None,
+            None,
+            "ASSISTANT_TURN",
+            {
+                "content": message,
+                "state": outcome.state,
+                "status": outcome.status,
+                "reviewId": outcome.review_id,
+                "requestId": outcome.request_id,
+                "confidence": outcome.confidence,
+                "band": outcome.band,
+            },
+        )
+        return outcome
