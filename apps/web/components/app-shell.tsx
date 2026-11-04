@@ -5,9 +5,11 @@ import { usePathname, useRouter } from "next/navigation";
 import { motion } from "framer-motion";
 import { signOut } from "next-auth/react";
 import {
+  Bot,
   Building2,
   CheckSquare,
   ChevronRight,
+  ClipboardCheck,
   FilePlus2,
   LayoutDashboard,
   LogOut,
@@ -30,6 +32,13 @@ interface NavItem {
 const NAV: NavItem[] = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/requests/new", label: "New request", icon: FilePlus2 },
+  { href: "/assistant", label: "Assistant", icon: Bot, roles: ["REQUESTER", "ADMIN"] },
+  {
+    href: "/assistant/reviews",
+    label: "AI reviews",
+    icon: ClipboardCheck,
+    roles: ["APPROVER", "FINANCE", "ADMIN"],
+  },
   { href: "/approvals", label: "Approvals", icon: CheckSquare, roles: ["APPROVER", "FINANCE", "ADMIN"] },
   { href: "/vendors", label: "Vendors", icon: Building2 },
   { href: "/policies", label: "Policies", icon: ShieldCheck, roles: ["ADMIN"] },
@@ -37,6 +46,7 @@ const NAV: NavItem[] = [
 ];
 
 function isActive(pathname: string, href: string): boolean {
+  if (href === "/assistant" && pathname.startsWith("/assistant/reviews")) return false;
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 

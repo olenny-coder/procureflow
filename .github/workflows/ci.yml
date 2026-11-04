@@ -56,6 +56,26 @@ jobs:
           AUTH_URL: http://localhost:3000
           NEXTAUTH_URL: http://localhost:3000
 
+  assistant:
+    name: Assistant orchestrator replay tests
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: services/assistant/requirements.txt
+
+      - name: Install assistant dependencies
+        run: pip install -r services/assistant/requirements.txt
+
+      - name: Replay assistant conversations
+        run: python -m pytest services/assistant/tests -q
+
   stock-engine:
     name: Workflows + E2E against stock workflow engine
     runs-on: ubuntu-24.04

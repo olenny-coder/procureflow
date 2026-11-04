@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   boolean,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -259,3 +260,150 @@ export type ApprovalTask = typeof approvalTasks.$inferSelect;
 export type PurchaseOrder = typeof purchaseOrders.$inferSelect;
 export type AuditEvent = typeof auditEvents.$inferSelect;
 export type NotificationOutboxRow = typeof notificationOutbox.$inferSelect;
+
+// Conversational procurement assistant. These rows are intentionally separate
+// from the request workflow tables so the assistant can be audited and disabled
+// without changing the approval system of record.
+export const assistantConversations = pgTable(
+  "assistant_conversations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    requesterId: uuid("requester_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    status: text("status").notNull().default("ACTIVE"),
+    state: text("state").notNull().default("COLLECTING"),
+    pendingSlot: text("pending_slot"),
+    routingPath: text("routing_path"),
+    requestId: uuid("request_id").references(() => purchaseRequests.id, {
+      onDelete: "set null",
+    }),
+    modelName: text("model_name").notNull(),
+    modelQuantization: text("model_quantization").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [index("assistant_conversations_requester_idx").on(table.requesterId)],
+);
+
+export const assistantTurns = pgTable(
+  "assistant_turns",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => assistantConversations.id, { onDelete: "cascade" }),
+    turnIndex: integer("turn_index").notNull(),
+    role: text("role").notNull(),
+    content: text("content").notNull().default(""),
+    visibleTools: jsonb("visible_tools").$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+    toolCalls: jsonb("tool_calls")
+      .$type<Array<Record<string, unknown>>>()
+      .notNull()
+      .default(sql`'[]'::jsonb`),
+    confidence: doublePrecision("confidence"),
+    band: text("band"),
+    modelName: text("model_name"),
+    modelQuantization: text("model_quantization"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    uniqueIndex("assistant_turns_conversation_turn_unique").on(
+      table.conversationId,
+      table.turnIndex,
+    ),
+    index("assistant_turns_conversation_idx").on(table.conversationId, table.turnIndex),
+  ],
+);
+
+export const assistantSlotValues = pgTable(
+  "assistant_slot_values",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => assistantConversations.id, { onDelete: "cascade" }),
+    slotKey: text("slot_key").notNull(),
+    status: text("status").notNull().default("PENDING"),
+    value: jsonb("value"),
+    sourceTurnId: uuid("source_turn_id").references(() => assistantTurns.id, {
+      onDelete: "set null",
+    }),
+    confidence: doublePrecision("confidence"),
+    band: text("band"),
+    guardrail: jsonb("guardrail")
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    uniqueIndex("assistant_slot_conversation_slot_unique").on(
+      table.conversationId,
+      table.slotKey,
+    ),
+  ],
+);
+
+export const assistantReviews = pgTable(
+  "assistant_reviews",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => assistantConversations.id, { onDelete: "cascade" }),
+    requesterId: uuid("requester_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    turnId: uuid("turn_id").references(() => assistantTurns.id, { onDelete: "set null" }),
+    slotKey: text("slot_key"),
+    kind: text("kind").notNull().default("SLOT"),
+    proposedValue: jsonb("proposed_value").notNull(),
+    sourceSnippet: text("source_snippet").notNull().default(""),
+    confidence: doublePrecision("confidence"),
+    band: text("band"),
+    escalationReason: text("escalation_reason").notNull(),
+    status: text("status").notNull().default("PENDING"),
+    assignedRole: text("assigned_role").notNull(),
+    reviewerId: uuid("reviewer_id").references(() => users.id, { onDelete: "set null" }),
+    finalValue: jsonb("final_value"),
+    decisionNote: text("decision_note"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("assistant_reviews_status_idx").on(table.status, table.assignedRole),
+    index("assistant_reviews_conversation_idx").on(table.conversationId),
+  ],
+);
+
+export const assistantAuditEvents = pgTable(
+  "assistant_audit_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    conversationId: uuid("conversation_id").notNull(),
+    turnId: uuid("turn_id"),
+    actorId: uuid("actor_id"),
+    eventType: text("event_type").notNull(),
+    payload: jsonb("payload").$type<Record<string, unknown>>().notNull().default(sql`'{}'::jsonb`),
+    modelName: text("model_name"),
+    modelQuantization: text("model_quantization"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    index("assistant_audit_conversation_idx").on(table.conversationId, table.createdAt),
+  ],
+);
+
+export type AssistantConversation = typeof assistantConversations.$inferSelect;
+export type AssistantTurn = typeof assistantTurns.$inferSelect;
+export type AssistantSlotValue = typeof assistantSlotValues.$inferSelect;
+export type AssistantReview = typeof assistantReviews.$inferSelect;
+export type AssistantAuditEvent = typeof assistantAuditEvents.$inferSelect;

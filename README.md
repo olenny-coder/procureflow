@@ -467,11 +467,50 @@ limited per process.
 | `GET/POST` | `/api/policies` | List/create policies (admin) |
 | `PATCH` | `/api/policies/:id` | Edit policy (admin) |
 | `GET` | `/api/audit` | Filter/paginate audit log (admin/finance) |
+| `POST` | `/api/assistant/conversations` | Start a requester-scoped assistant intake |
+| `POST` | `/api/assistant/conversations/:id/turns` | Send one conversation turn |
+| `GET` | `/api/assistant/reviews` | Role-scoped assistant review queue |
+| `POST` | `/api/assistant/reviews/:id` | Approve/reject/edit an escalation |
 | `POST` | `/api/internal/outbox` | Retry outbox notifications (Bearer `INTERNAL_API_TOKEN` or admin) |
 
 Pages: `/` marketing landing, `/login`, `/dashboard`, `/requests/new` wizard,
 `/requests/:id` timeline, `/approvals` inbox, `/vendors` directory, `/policies`
-admin, `/audit` log.
+admin, `/audit` log, `/assistant` guided intake, `/assistant/reviews` HITL queue.
+
+### Procurement assistant
+
+The assistant is a separate deterministic Python orchestrator with a local model as its
+language interface. The model does not choose the next slot, readiness, routing,
+submission, retries, or permissions. See
+[services/assistant/README.md](services/assistant/README.md).
+
+Run it locally:
+
+```bash
+ollama serve
+ollama pull phi4-mini:3.8b
+pnpm db:migrate
+pnpm assistant:dev
+# in another terminal
+pnpm dev
+```
+
+The assistant service is also part of `docker-compose.yml`; Ollama stays on the host and
+is reached at `host.docker.internal:11434`. No conversation or model data leaves the
+machine. The default confidence thresholds are conservative calibration seeds:
+
+```env
+ASSISTANT_MODEL="phi4-mini:3.8b"
+ASSISTANT_MODEL_QUANTIZATION="Q4_K_M"
+ASSISTANT_AUTO_ACCEPT_LIMIT_CENTS="250000"
+ASSISTANT_HIGH_MIN_LOGPROB="-0.35"
+ASSISTANT_MID_MIN_LOGPROB="-1.0"
+```
+
+Every turn exposes only the tools allowed at that step; filled and dependency-blocked
+slots are never sent to the model. Low confidence, malformed tool calls, failed
+guardrails, and consequential routing go to a role-scoped review queue. The assistant
+can create a **draft** only — it never submits or approves.
 
 ---
 
@@ -497,8 +536,9 @@ error, so failures are visible and retryable. `POST /api/internal/outbox` starts
 ## Testing
 
 ```bash
-pnpm test:unit       # policy engine + Zod schemas (22 tests)
+pnpm test:unit       # policy engine + Zod schemas
 pnpm test:workflows  # workflow engine workflow integration tests (5 scenarios)
+pnpm assistant:test  # 15 deterministic assistant replay tests
 pnpm typecheck
 pnpm lint
 pnpm build
