@@ -624,7 +624,12 @@ class Orchestrator:
         conversation_id = str(conversation["id"])
         if slot not in SLOTS:
             raise MalformedToolCall(f"Unknown slot {slot!r}")
-        if conversation["state"] == "COMPLETE":
+        if conversation["state"] == "READBACK":
+            if slot != conversation.get("pending_slot"):
+                raise MalformedToolCall("correct_value targeted a slot outside the active readback.")
+        elif conversation["state"] == "COMPLETE":
+            if slot not in filled_slots(slots):
+                raise MalformedToolCall("correct_value targeted a slot that is not confirmed.")
             for dependent in transitive_dependents(slot):
                 self.repo.delete_slot(conversation_id, dependent)
             self.repo.delete_slot(conversation_id, slot)
@@ -635,6 +640,8 @@ class Orchestrator:
                 "DEPENDENT_SLOTS_INVALIDATED",
                 {"slot": slot, "dependents": sorted(transitive_dependents(slot))},
             )
+        else:
+            raise MalformedToolCall("correct_value is only available during readback or after completion.")
         value = normalize_value(slot, raw_value)
         guardrail = check_slot(
             slot,

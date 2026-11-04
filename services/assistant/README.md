@@ -168,6 +168,7 @@ pnpm assistant:test
 | `app/orchestrator.py` | Turn/control-flow state machine |
 | `app/guardrails.py` | Deterministic hard rules |
 | `app/routing.py` | Grounded policy lookup and routing decision |
+| `app/tasks.py` | Deterministic slot-completion tasks attached to the DAG |
 | `app/confidence.py` | Mean logprob and banding |
 | `app/reviews.py` | Scoped human review decisions |
 | `app/repository.py` | Postgres persistence and draft creation |
