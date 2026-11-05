@@ -52,7 +52,7 @@ services:
       dockerfile: services/assistant/Dockerfile
     restart: unless-stopped
     extra_hosts:
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:${ASSISTANT_HOST_IP:-host-gateway}"
     depends_on:
       postgres:
         condition: service_healthy

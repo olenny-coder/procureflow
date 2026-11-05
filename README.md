@@ -496,8 +496,11 @@ pnpm dev
 ```
 
 The assistant service is also part of `docker-compose.yml`; Ollama stays on the host and
-is reached at `host.docker.internal:11434`. No conversation or model data leaves the
-machine. The default confidence thresholds are conservative calibration seeds:
+is reached at `host.docker.internal:11434`. If Docker is running inside WSL without
+Docker Desktop, set `ASSISTANT_HOST_IP` to the WSL host gateway from `ip route`
+(for example `172.28.144.1`) and bind Ollama with `OLLAMA_HOST=0.0.0.0:11434`.
+No conversation or model data leaves the machine. The default confidence thresholds
+are conservative calibration seeds:
 
 ```env
 ASSISTANT_MODEL="phi4-mini:3.8b"
@@ -538,7 +541,7 @@ error, so failures are visible and retryable. `POST /api/internal/outbox` starts
 ```bash
 pnpm test:unit       # policy engine + Zod schemas
 pnpm test:workflows  # workflow engine workflow integration tests (5 scenarios)
-pnpm assistant:test  # 16 deterministic assistant replay tests
+pnpm assistant:test  # 20 deterministic assistant replay tests
 pnpm typecheck
 pnpm lint
 pnpm build
@@ -858,3 +861,4 @@ CI runs on push and pull requests.
 
 MIT — see [`LICENSE`](./LICENSE). The vendored workflow engine tree retains its MIT license
 at `third_party/temporal/LICENSE`.
+

@@ -75,7 +75,8 @@ def fill_intake(repo, llm, orch, conversation_id, user):
 def test_initial_tool_visibility_hides_dependent_slots():
     tools = visible_tools("COLLECTING", {}, None, "hello", "REQUESTER")
     names = [tool.name for tool in tools]
-    assert names == ["set_vendor", "set_category"]
+    assert names == ["set_vendor"]
+    assert "set_category" not in names
     assert "set_supplier" not in names
     assert "set_quantity" not in names
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from .audit import AuditWriter
@@ -16,6 +18,7 @@ from .contracts import (
     REJECT_READBACK,
     RESOLVE_ROUTING,
     SLOTS,
+    CATEGORIES,
 )
 from .dag import (
     SlotValidationError,
@@ -29,7 +32,7 @@ from .dag import (
     value_text,
 )
 from .guardrails import check_slot, final_guardrails
-from .llm import LLMClient, LLMError, LLMResult
+from .llm import LLMClient, LLMError, LLMResult, ToolCall
 from .repository import Repository
 from .routing import lookup_policy, resolve_routing_path
 from .tasks import run_slot_tasks
@@ -52,6 +55,54 @@ class MalformedToolCall(AssistantError):
     def __init__(self, message: str, raw: str = "") -> None:
         super().__init__(message)
         self.raw = raw
+
+
+def _readback_decision(message: str) -> str | None:
+    text = message.strip().lower().rstrip(".!")
+    if text in {"yes", "y", "yep", "yeah", "confirm", "confirmed", "correct", "right", "sure", "ok", "okay", "looks good", "that is right", "that's right"}:
+        return "CONFIRM"
+    if text in {"no", "n", "nope", "wrong", "reject", "cancel", "change it", "not right"}:
+        return "REJECT"
+    return None
+
+
+def _parse_next_slot_value(slot: str, message: str) -> Any | None:
+    """Strict typed fallback for one visible slot when the model did not call a tool."""
+    text = message.strip()
+    lower = text.lower()
+    if not text or "?" in text:
+        return None
+    if any(word in lower for word in ("policy", "limit", "approved", "route", "spend", "threshold")):
+        return None
+    if slot == "category":
+        candidate = text.upper()
+        return candidate if candidate in CATEGORIES else None
+    if slot == "quantity":
+        match = re.fullmatch(r"\s*(\d{1,6})\s*", text)
+        return int(match.group(1)) if match else None
+    if slot == "budget":
+        cleaned = text.replace("$", "").replace(",", "").strip()
+        match = re.fullmatch(r"(\d+(?:\.\d{1,2})?)", cleaned)
+        return float(match.group(1)) if match else None
+    if slot == "cost_center":
+        match = re.fullmatch(r"(CC-[A-Za-z]{2,4}-\d{3})", text)
+        return match.group(1).upper() if match else None
+    if slot == "timeline":
+        try:
+            parsed = date.fromisoformat(text)
+        except ValueError:
+            return None
+        return parsed.isoformat() if parsed >= date.today() else None
+    if slot == "vendor" or slot == "supplier":
+        if any(
+            phrase in lower
+            for phrase in ("i need", "we need", "i want", "we want", "looking for", "please", "buy ")
+        ):
+            return None
+        return text if 2 <= len(text) <= 80 else None
+    if slot == "justification":
+        return text if 10 <= len(text) <= 2000 else None
+    return None
 
 
 @dataclass
@@ -197,6 +248,35 @@ class Orchestrator:
             state = "COLLECTING"
             self.repo.update_conversation(conversation_id, state=state)
 
+        # An explicit yes/no at the readback gate is deterministic and does not
+        # depend on the model choosing a tool. This is also the safety net for
+        # small models whose Ollama template does not surface native tool calls.
+        if state == "READBACK" and pending_slot:
+            decision = _readback_decision(message)
+            if decision:
+                assistant_turn = self.repo.add_turn(
+                    conversation_id,
+                    "ASSISTANT",
+                    "",
+                    [],
+                    [],
+                    None,
+                    None,
+                    self.settings.model_name,
+                    self.settings.model_quantization,
+                )
+                turn_id = str(assistant_turn["id"])
+                self._audit(
+                    conversation_id,
+                    turn_id,
+                    user["id"],
+                    "DETERMINISTIC_READBACK_DECISION",
+                    {"decision": decision, "slot": pending_slot},
+                )
+                if decision == "CONFIRM":
+                    return self._confirm(conversation, turn_id, user, slots)
+                return self._reject(conversation, turn_id, user, slots)
+
         tools = visible_tools(state, slots, pending_slot, message, user["role"])
         tool_specs = tool_specs_by_name(tools)
         visible_names = [tool.name for tool in tools]
@@ -245,6 +325,40 @@ class Orchestrator:
         )
         turn_id = str(assistant_turn["id"])
 
+        # Raw model output is retained so a reviewer can reconstruct exactly why
+        # a text tool-call adapter accepted or rejected it.
+        self._audit(
+            conversation_id,
+            turn_id,
+            user["id"],
+            "MODEL_RESPONSE",
+            {
+                "content": result.content,
+                "toolCalls": [call.__dict__ for call in result.tool_calls],
+                "confidence": score,
+                "band": band,
+            },
+        )
+
+        # Ollama's Phi template sometimes emits the function call in
+        # message.content instead of message.tool_calls. Accept only the exact
+        # structured call shape; anything else is a hard failure.
+        if not result.tool_calls and result.content.strip():
+            try:
+                text_calls = self._parse_text_tool_calls(result.content, visible_names)
+            except MalformedToolCall as exc:
+                return self._malformed(conversation, turn_id, user, str(exc), exc.raw)
+            if text_calls:
+                result.tool_calls = text_calls
+                result.content = ""
+                self._audit(
+                    conversation_id,
+                    turn_id,
+                    user["id"],
+                    "TEXT_TOOL_CALL_ADAPTER",
+                    {"calls": [call.__dict__ for call in text_calls]},
+                )
+
         if len(result.tool_calls) > 1:
             return self._malformed(
                 conversation,
@@ -254,12 +368,19 @@ class Orchestrator:
                 json.dumps([call.__dict__ for call in result.tool_calls]),
             )
         if not result.tool_calls:
-            content = result.content.strip() or (
-                "I need one detail at a time. " + self._next_question(slots)
+            return self._no_tool_fallback(
+                conversation,
+                turn_id,
+                user,
+                state,
+                slots,
+                pending_slot,
+                tool_specs,
+                message,
+                result.content,
+                score,
+                band,
             )
-            content = self._guard_claim(content, conversation, turn_id, user)
-            self.repo.update_turn(turn_id, content)
-            return self._outcome(conversation, content, confidence=score, band=band)
 
         call = result.tool_calls[0]
         if call.name not in tool_specs:
@@ -283,6 +404,7 @@ class Orchestrator:
             )
 
         try:
+            arguments, dialect = self._unwrap_arguments(call.name, arguments)
             self._audit(
                 conversation_id,
                 turn_id,
@@ -291,6 +413,7 @@ class Orchestrator:
                 {
                     "tool": call.name,
                     "arguments": arguments,
+                    "argumentDialect": dialect,
                     "visibleTools": visible_names,
                 },
             )
@@ -311,6 +434,172 @@ class Orchestrator:
             return self._malformed(conversation, turn_id, user, str(exc), call.arguments_raw)
         except MalformedToolCall as exc:
             return self._malformed(conversation, turn_id, user, str(exc), exc.raw)
+
+    # ------------------------------------------------------------------ tools
+    def _parse_text_tool_calls(self, content: str, visible_names: list[str]) -> list[ToolCall]:
+        text = content.strip()
+        text = text.replace("<|tool_call|>", "").replace("<|/tool_call|>", "").strip()
+        if not text.startswith(("[", "{")):
+            if "<|tool_call|>" in content or any(name in content for name in visible_names):
+                raise MalformedToolCall(
+                    "The model returned a tool-like message without a structured tool call.",
+                    content,
+                )
+            return []
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError:
+            if any(name in content for name in visible_names):
+                raise MalformedToolCall("The model returned malformed tool-call JSON.", content)
+            return []
+
+        items = payload if isinstance(payload, list) else [payload]
+        if not items:
+            return []
+        calls: list[ToolCall] = []
+        for item in items:
+            if not isinstance(item, dict):
+                raise MalformedToolCall("Tool-call JSON was not an object.", content)
+            name = item.get("name") or item.get("type")
+            if not isinstance(name, str):
+                raise MalformedToolCall("Tool-call JSON had no tool name.", content)
+            if name not in visible_names:
+                raise MalformedToolCall(f"Tool {name!r} was not in the visible tool set.", content)
+            arguments = item.get("arguments")
+            if arguments is None and isinstance(item.get("parameters"), dict):
+                arguments = item["parameters"]
+            if arguments is None and "value" in item:
+                arguments = {"value": item["value"]}
+            if isinstance(arguments, str):
+                try:
+                    arguments = json.loads(arguments)
+                except json.JSONDecodeError as exc:
+                    raise MalformedToolCall("Tool arguments were not valid JSON.", content) from exc
+            if not isinstance(arguments, dict):
+                raise MalformedToolCall("Tool arguments were not an object.", content)
+            calls.append(
+                ToolCall(
+                    id=f"text_{len(calls)}",
+                    name=name,
+                    arguments_raw=json.dumps(arguments),
+                )
+            )
+        return calls
+
+    @staticmethod
+    def _unwrap_arguments(name: str, arguments: dict[str, Any]) -> tuple[dict[str, Any], str]:
+        if (
+            set(arguments) == {"type", "parameters"}
+            and arguments.get("type") == name
+            and isinstance(arguments.get("parameters"), dict)
+        ):
+            return arguments["parameters"], "phi_envelope"
+        return arguments, "direct"
+
+    def _no_tool_fallback(
+        self,
+        conversation: dict[str, Any],
+        turn_id: str,
+        user: dict[str, Any],
+        state: str,
+        slots: dict[str, dict[str, Any]],
+        pending_slot: str | None,
+        tool_specs: dict[str, Any],
+        user_message: str,
+        model_content: str,
+        score: float | None,
+        band: str,
+    ) -> TurnOutcome:
+        conversation_id = str(conversation["id"])
+        self._audit(
+            conversation_id,
+            turn_id,
+            user["id"],
+            "NO_TOOL_CALL",
+            {"content": model_content, "state": state, "visibleTools": list(tool_specs)},
+        )
+
+        # A policy question should still be grounded even if the model forgot to
+        # call the lookup tool. The lookup itself is deterministic and the model
+        # may paraphrase only its result.
+        if LOOKUP_POLICY.name in tool_specs and (
+            "?" in user_message
+            or any(
+                word in user_message.lower()
+                for word in ("policy", "limit", "approved", "threshold", "route", "spend")
+            )
+        ):
+            return self._lookup_policy(conversation, turn_id, user, user_message, slots)
+
+        if CHECK_SUPPLIER.name in tool_specs and (
+            "?" in user_message
+            or any(word in user_message.lower() for word in ("supplier", "vendor", "approved"))
+        ):
+            vendor_name = (
+                str(slots.get("vendor", {}).get("value"))
+                if slots.get("vendor", {}).get("value")
+                else user_message
+            )
+            return self._check_supplier(conversation, turn_id, user, vendor_name)
+
+        if RESOLVE_ROUTING.name in tool_specs and any(
+            word in user_message.lower() for word in ("route", "routing", "path", "bid", "legal")
+        ):
+            return self._resolve_routing(conversation, turn_id, user, slots)
+
+        if state == "READBACK" and pending_slot:
+            pending = slots.get(pending_slot)
+            if pending:
+                content = readback_message(pending_slot, pending.get("value"))
+                self.repo.update_turn(turn_id, content)
+                return self._outcome(conversation, content, confidence=score, band=band)
+
+        # A small local model may describe the value in prose instead of calling
+        # the visible setter. For the one deterministic next slot, accept only a
+        # strict typed parse. The normal setter/guardrail/readback path still runs.
+        if not ready(slots):
+            next_slots = available_slots(slots)
+            if next_slots:
+                fallback = _parse_next_slot_value(next_slots[0], user_message)
+                if fallback is not None:
+                    self._audit(
+                        conversation_id,
+                        turn_id,
+                        user["id"],
+                        "DETERMINISTIC_SLOT_FALLBACK",
+                        {"slot": next_slots[0], "value": fallback},
+                    )
+                    return self._set_slot(
+                        conversation,
+                        turn_id,
+                        user,
+                        next_slots[0],
+                        fallback,
+                        None,
+                        "MID",
+                        slots,
+                        user_message,
+                    )
+
+        if ready(slots):
+            if user_message.strip().lower().rstrip(".!") in {"finalize", "finalise", "create draft", "prepare draft"}:
+                return self._finalize(conversation, turn_id, user, slots, None, score, band)
+            content = "All intake values are confirmed. Say finalize when you want me to prepare the draft."
+        else:
+            content = (
+                "I did not save that because no recording tool was called. "
+                + self._next_question(slots)
+            )
+        content = self._guard_claim(content, conversation, turn_id, user)
+        self.repo.update_turn(turn_id, content)
+        self._audit(
+            conversation_id,
+            turn_id,
+            user["id"],
+            "NO_TOOL_CALL_FALLBACK",
+            {"content": content, "state": state},
+        )
+        return self._outcome(conversation, content, confidence=score, band=band)
 
     # ------------------------------------------------------------------ tools
     def _execute_tool(
@@ -970,13 +1259,13 @@ class Orchestrator:
     ) -> list[dict[str, Any]]:
         filled = {key: row.get("value") for key, row in slots.items() if row.get("status") == "FILLED"}
         system = (
-            "You are ProcureFlow's procurement intake assistant. You own language only. "
-            "The application owns all control flow: it decides the next slot, readiness, routing, "
-            "submission, retries, and RBAC. Never claim a request was submitted, approved, or routed. "
-            "Ask for at most one or two missing fields. Use only the provided tools. Never invent "
-            "policy, supplier, budget, or routing facts; call the grounded lookup tools. "
-            "Every slot value must be read back and explicitly confirmed by the requester before it "
-            "moves to filled. If the requester is ambiguous, ask a clarifying question. "
+            "You are ProcureFlow's procurement intake assistant. The application owns control flow. "
+            "Use exactly one provided tool per turn. To record a value, call the matching set_* tool "
+            "immediately with the supplied value; do not ask for confirmation before the call because "
+            "the application will read it back. Never claim submitted, approved, or routed. Never invent "
+            "policy facts; call lookup_policy when it is provided. Ask for at most one field per turn. "
+            "If the tool API does not expose tool_calls, output only JSON in this exact shape: "
+            '[{"name":"tool_name","arguments":{"value":"..."}}]. '
             f"Authenticated role: {user['role']}. "
             f"Confirmed values: {json.dumps(filled, default=str)}. "
             f"Pending readback slot: {pending_slot}. "

@@ -64,13 +64,13 @@ def visible_tools(
         tools.extend([RESOLVE_ROUTING, LOOKUP_POLICY, FINALIZE_INTAKE])
         return tools
 
-    tools = [SETTERS[slot] for slot in available_slots(slots)[:2]]
+    tools = [SETTERS[slot] for slot in available_slots(slots)[:1]]
     lower = message.lower()
     if _asks_question(message):
         tools.append(LOOKUP_POLICY)
-    if "vendor" in filled_slots(slots) or any(
+    if any(
         word in lower for word in ("supplier", "vendor", "approved")
-    ):
+    ) and ("?" in message or "is " in lower or "check" in lower):
         tools.append(CHECK_SUPPLIER)
     if any(word in lower for word in ("route", "routing", "path", "bid", "legal")):
         tools.append(RESOLVE_ROUTING)

@@ -40,6 +40,34 @@ The default configuration records `ASSISTANT_MODEL=phi4-mini:3.8b` and
 `ollama show` for the exact local artifact. A different ~4B model only requires changing
 `ASSISTANT_MODEL` (and the quantization metadata); no code changes.
 
+### Docker/WSL networking
+
+Ollama must listen beyond Windows loopback:
+
+```powershell
+[Environment]::SetEnvironmentVariable("OLLAMA_HOST", "0.0.0.0:11434", "User")
+# restart the Ollama app / `ollama serve`
+```
+
+On Docker Desktop, `host.docker.internal` is the normal route. If Docker runs inside
+WSL without Docker Desktop, `host.docker.internal` resolves to the WSL Docker bridge,
+not the Windows host. Use the WSL host gateway instead:
+
+```env
+ASSISTANT_LLM_BASE_URL=http://172.28.144.1:11434/v1
+```
+
+Find the current value with `ip route` in WSL. The assistant container must be able to
+reach `/v1/models`; this is checked in the deployment troubleshooting section.
+
+The Phi Ollama template sometimes emits a function call in `message.content`
+instead of `message.tool_calls`. The adapter accepts only the exact structured
+`[{"name":"...","arguments":{...}}]` form, validates it against the visible tool
+schema, and records the protocol in the audit log. Prose that merely claims a value
+was recorded is never treated as a write. If the model neither calls a tool nor
+emits the exact structure, the orchestrator asks for the next slot again (or performs
+a strict typed fallback for that one slot) rather than inventing state.
+
 ### 2. Database
 
 From the repository root:
@@ -85,7 +113,7 @@ item is visible to requesters and admins; approvers/finance/admin see **AI revie
 - while reading back, only `correct_value` for the pending slot plus
   `confirm_readback` / `reject_readback` are sent;
 - `lookup_policy` appears for policy questions;
-- `check_supplier` appears when a vendor is present or the message asks about suppliers;
+- `check_supplier` appears only for supplier/vendor questions;
 - `resolve_routing_path` appears for route questions or when the DAG is complete;
 - `finalize_intake` only appears when every slot is confirmed.
 
@@ -144,12 +172,15 @@ thresholds; validate on a held-out sample.
 pnpm assistant:test
 ```
 
-16 replay tests cover:
+20 replay tests cover:
 
 - initial visibility hides dependent slots;
 - readback is required before a slot is filled;
 - ambiguous values ask for clarification instead of guessing;
 - malformed tool calls hard-fail and write nothing;
+- Phi text tool calls and Phi envelope arguments are strictly adapted;
+- prose cannot claim a value was recorded without a tool;
+- explicit readback yes/no is deterministic;
 - unapproved vendors are escalated;
 - RBAC blocks finalization by non-requester roles;
 - corrections invalidate transitive dependents;
